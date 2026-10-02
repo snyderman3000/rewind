@@ -347,11 +347,14 @@ type Filter struct {
 	Cert    int     `json:"cert"`    // index into certSteps
 	Runtime int     `json:"runtime"` // index into runtimeSteps
 	Hide    bool    `json:"hide_unscored"`
+	Owned   int     `json:"radarr"` // index into ownedSteps
 }
+
+var ownedSteps = []string{"SHOW ALL", "HIDE WHAT I HAVE", "ONLY WHAT I HAVE"}
 
 func (f Filter) Active() int {
 	n := 0
-	for _, on := range []bool{f.Genre != "", f.Service != "", f.MinRT > 0, f.Cert > 0, f.Runtime > 0, f.Hide} {
+	for _, on := range []bool{f.Genre != "", f.Service != "", f.MinRT > 0, f.Cert > 0, f.Runtime > 0, f.Hide, f.Owned > 0} {
 		if on {
 			n++
 		}
@@ -419,9 +422,13 @@ func (f Filter) Match(m *Movie) bool {
 }
 
 // Apply filters and sorts. Movies without the sort's score go last.
-func (f Filter) Apply(all []*Movie) []*Movie {
+// owned reports whether a movie is already in Radarr (nil when Radarr isn't set up).
+func (f Filter) Apply(all []*Movie, owned func(*Movie) bool) []*Movie {
 	var out []*Movie
 	for _, m := range all {
+		if owned != nil && f.Owned > 0 && owned(m) != (f.Owned == 2) {
+			continue
+		}
 		if f.Match(m) {
 			out = append(out, m)
 		}
@@ -520,6 +527,9 @@ func (env *Env) LoadFilter() Filter {
 	}
 	if f.Runtime < 0 || f.Runtime >= len(runtimeSteps) {
 		f.Runtime = 0
+	}
+	if f.Owned < 0 || f.Owned >= len(ownedSteps) {
+		f.Owned = 0
 	}
 	return f
 }

@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 const userAgent = "Rewind/" + version + " (OnionOS movie guide)"
 
 // Config lives in App/Rewind/data/config.json.
@@ -26,6 +26,14 @@ type Config struct {
 	MaxMovies    int    `json:"max_movies"`    // how many titles to keep in the guide
 	Providers    []int  `json:"providers"`     // optional TMDB provider ids to limit to (8 = Netflix…)
 	RefreshHours int    `json:"refresh_hours"` // how old the guide can get before it refreshes on launch
+
+	// Radarr on the home network (optional)
+	RadarrURL     string `json:"radarr_url"`                  // e.g. http://192.168.1.20:7878
+	RadarrKey     string `json:"radarr_api_key"`              // Radarr → Settings → General → API Key
+	RadarrProfile string `json:"radarr_quality_profile"`      // profile name or id; blank = Radarr's first
+	RadarrRoot    string `json:"radarr_root_folder"`          // root folder path; blank = Radarr's first
+	RadarrSearch  *bool  `json:"radarr_search,omitempty"`     // search as soon as it's added (default true)
+	RadarrAvail   string `json:"radarr_minimum_availability"` // announced | inCinemas | released (default)
 }
 
 func defaultConfig() Config {
@@ -76,6 +84,8 @@ func loadConfig(path string) Config {
 	d := defaultConfig()
 	cfg.TMDBKey = strings.TrimSpace(cfg.TMDBKey)
 	cfg.OMDbKey = strings.TrimSpace(cfg.OMDbKey)
+	cfg.RadarrURL = strings.TrimSpace(cfg.RadarrURL)
+	cfg.RadarrKey = strings.TrimSpace(cfg.RadarrKey)
 	if cfg.Region == "" {
 		cfg.Region = d.Region
 	}

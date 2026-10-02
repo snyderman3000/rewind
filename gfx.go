@@ -285,7 +285,7 @@ func (f *Font) glyph(r rune) *glyph {
 // symbol synthesises UI glyphs the bundled fonts don't have (triangles, dots, arrows).
 func (f *Font) symbol(r rune) *glyph {
 	switch r {
-	case '▲', '●', '○', '◀', '▶', '↕', '→', '✓', '★':
+	case '▲', '▼', '●', '○', '◀', '▶', '↕', '→', '✓', '★':
 	default:
 		return nil
 	}
@@ -311,6 +311,10 @@ func (f *Font) symbol(r rune) *glyph {
 			switch r {
 			case '▲':
 				if math.Abs(fx-c) <= fy/2+0.5 {
+					set(x, y)
+				}
+			case '▼':
+				if math.Abs(fx-c) <= (float64(s-1)-fy)/2+0.5 {
 					set(x, y)
 				}
 			case '●':

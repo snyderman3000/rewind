@@ -8,6 +8,7 @@
 |---|---|
 | ![The shelf](docs/list.png) | ![Movie details](docs/detail.png) |
 | ![Trailer reel](docs/trailer.png) | ![Sort and filter](docs/filter.png) |
+| ![Add to Radarr](docs/radarr.png) | |
 
 *Screenshots use invented movies, scores and artwork.*
 
@@ -19,6 +20,7 @@
 - **Sort** by Tomatometer, newest, popular, IMDb, Metascore, title or runtime.
 - **Filter** by genre, streaming service, minimum Tomatometer (60 / 75 / 90%), age rating (G, up to PG, up to PG-13, R only), runtime, and hide unscored films. Choices are remembered.
 - **Trailers.** The Miyoo can't play YouTube, so each film gets a VCR-style reel of its stills, with a QR code beside it that opens the real trailer on your phone.
+- **Radarr button.** Point Rewind at your Radarr and press **X** on any movie to add it. Radarr searches and downloads it, and it lands in Plex (or whatever watches that folder). The shelf marks what you already have, the details screen shows download progress, and a filter hides (or shows only) what's in your library.
 - **Fast and offline-friendly.** The guide is cached on the SD card, opens instantly, and refreshes itself in the background every few hours.
 - **80s video-store look.** Amber phosphor, scanlines, VHS tapes with spinning reels, VCR on-screen display and tracking noise.
 
@@ -39,8 +41,8 @@ Requires OnionOS 4.2 or newer and Wi-Fi (Miyoo Mini Plus or Mini Flip).
 | Screen | Buttons |
 |---|---|
 | Shelf | ↑↓ move · ←→ page · **A** details · **L1/R1** genre · **L2/R2** service · **Y** sort · **X** / START filters · **SELECT** refresh · **B** exit |
-| Details | **A** trailer · ↑↓ scroll synopsis · **L1/R1** previous/next · **B** back |
-| Trailer | **A** pause/play · ←→ still · **L1/R1** previous/next · **B** back |
+| Details | **A** trailer · **X** add to Radarr · **Y** recheck Radarr · ↑↓ scroll synopsis · **L1/R1** previous/next · **B** back |
+| Trailer | **A** pause/play · ←→ still · **L1/R1** previous/next · **X** add to Radarr · **B** back |
 
 MENU exits from anywhere.
 
@@ -59,6 +61,19 @@ MENU exits from anywhere.
 | `providers` | `[]` | Only these services, by TMDB id: 8 Netflix, 9 Prime Video, 337 Disney+, 15 Hulu, 1899 Max, 531 Paramount+, 386 Peacock, 350 Apple TV+ |
 | `refresh_hours` | `6` | How old the guide can get before it refreshes on launch |
 
+### Radarr (optional)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `radarr_url` | | Radarr's address on your network, e.g. `http://192.168.1.20:7878` (include a URL base such as `/radarr` if you set one) |
+| `radarr_api_key` | | Radarr → Settings → General → API Key |
+| `radarr_quality_profile` | first profile | Profile name or id, e.g. `HD-1080p` |
+| `radarr_root_folder` | first root folder | e.g. `/movies` |
+| `radarr_search` | `true` | Search for the movie as soon as it's added |
+| `radarr_minimum_availability` | `released` | `announced`, `inCinemas` or `released` |
+
+The shelf marks movies already in Radarr: **●** downloaded, **○** added but not downloaded yet. The handheld talks to Radarr directly, so it has to be on the same network. To have new downloads appear in Plex right away, add Plex under Radarr's Settings → Connect.
+
 Logs are written to `App/Rewind/data/rewind.log`.
 
 ## How "new on streaming" works
@@ -75,6 +90,7 @@ TMDB doesn't record the day a film was added to a service, so Rewind asks TMDB's
 | `tmdb.go` | Discover, details, genres, trailer and still selection |
 | `omdb.go` | Tomatometer, IMDb and Metascore |
 | `library.go` | Cached guide, background refresh, filtering and sorting |
+| `radarr.go`, `ui_radarr.go` | Radarr v3 API: library markers, download progress, adding movies |
 | `images.go` | Poster and still downloads, scaled and cached on the card |
 
 It compiles to a single static ARMv7 Go binary, with no SDL or C toolchain involved.

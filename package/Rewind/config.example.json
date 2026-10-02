@@ -6,5 +6,10 @@
   "days": 120,
   "max_movies": 120,
   "providers": [],
-  "refresh_hours": 6
+  "refresh_hours": 6,
+
+  "radarr_url": "",
+  "radarr_api_key": "",
+  "radarr_quality_profile": "",
+  "radarr_root_folder": ""
 }

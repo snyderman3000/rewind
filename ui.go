@@ -28,6 +28,7 @@ const (
 	modalNone modalKind = iota
 	modalMsg
 	modalFilter
+	modalAdd
 )
 
 const stillFrames = 70 // 3.5 s per still in the trailer reel
@@ -76,6 +77,8 @@ type UI struct {
 	toastUntil time.Time
 	omdbHinted bool
 
+	rad radarrUI
+
 	frame int
 	quit  bool
 	post  chan func()
@@ -88,7 +91,7 @@ func NewUI(env *Env, w, h int) *UI {
 	}
 	u := &UI{env: env, W: w, H: h, s: s, post: make(chan func(), 128),
 		imgs: map[string]*image.RGBA{}, imgBusy: map[string]bool{}, imgErr: map[string]bool{},
-		imgSlots: make(chan struct{}, 2), lib: &Library{Genres: map[int]string{}, Source: "empty"}}
+		imgSlots: make(chan struct{}, 2), rad: radarrUI{queue: map[int]*RadarrQueue{}, queueAt: map[int]time.Time{}}, lib: &Library{Genres: map[int]string{}, Source: "empty"}}
 	u.fLogo = loadFont(titleTTF, 23*s)
 	u.fBig = loadFont(titleTTF, 19*s)
 	u.fBody = loadFont(bodyTTF, 18*s)
@@ -108,6 +111,7 @@ func (u *UI) Start() {
 	u.filter = u.env.LoadFilter()
 	u.lib = u.env.LoadLibrary()
 	u.env.PruneImageCache(60 << 20)
+	u.radarrSync()
 	if u.env.Config.TMDBKey == "" {
 		u.scr = scrSetup
 		if len(u.lib.Movies) > 0 {
@@ -201,6 +205,7 @@ func (u *UI) refresh() {
 			default:
 				u.showToast(fmt.Sprintf("GUIDE UPDATED · %d TAPES", len(lib.Movies)))
 				u.hintOMDb()
+				u.radarrSync()
 			}
 		}
 	}()
@@ -215,7 +220,7 @@ func shortErr(s string) string {
 
 // refilter recomputes the visible list, keeping the movie with id keep selected if possible.
 func (u *UI) refilter(keep int) {
-	u.visible = u.filter.Apply(u.lib.Movies)
+	u.visible = u.filter.Apply(u.lib.Movies, u.ownedFn())
 	u.sel = 0
 	for i, m := range u.visible {
 		if m.ID == keep {
@@ -275,6 +280,8 @@ func (u *UI) Animating() bool {
 		return true
 	case u.scr == scrTrailer:
 		return !u.paused || u.frame-u.stillStart < 10 || u.anyBusy()
+	case (u.rad.adding || u.rad.checking) && u.modal == modalAdd:
+		return true
 	case u.refreshing && u.frame%5 == 0:
 		return true
 	case u.anyBusy() && u.frame%2 == 0:
@@ -364,6 +371,9 @@ func (u *UI) Key(k int) {
 		return
 	case modalFilter:
 		u.keyFilter(k)
+		return
+	case modalAdd:
+		u.keyAdd(k)
 		return
 	}
 	switch u.scr {
@@ -482,6 +492,7 @@ func (u *UI) openDetail(m *Movie) {
 	u.detailScrl = 0
 	w, h := u.detailPosterBox()
 	u.image(u.env.ImageURL("w342", m.Poster), w, h, true, true)
+	u.fetchQueue(m)
 }
 
 func (u *UI) stepMovie(d int) {
@@ -505,6 +516,12 @@ func (u *UI) keyDetail(k int) {
 		u.moved = time.Now()
 	case BtnA, BtnStart:
 		u.openTrailer(u.cur)
+	case BtnX:
+		u.openAdd(u.cur)
+	case BtnY:
+		u.radarrSync()
+		u.rad.queueAt[u.cur.ID] = time.Time{}
+		u.fetchQueue(u.cur)
 	case BtnUp:
 		if u.detailScrl > 0 {
 			u.detailScrl--
@@ -550,6 +567,8 @@ func (u *UI) keyTrailer(k int) {
 		if !u.paused {
 			u.stillStart = u.frame
 		}
+	case BtnX:
+		u.openAdd(u.cur)
 	case BtnLeft:
 		u.nextStill(-1)
 	case BtnRight:
@@ -570,6 +589,7 @@ const (
 	fRowCert
 	fRowRuntime
 	fRowUnscored
+	fRowOwned
 	fRowReset
 	fRows
 )
@@ -613,6 +633,11 @@ func (u *UI) keyFilter(k int) {
 		f.Runtime = step(f.Runtime, len(runtimeSteps))
 	case fRowUnscored:
 		f.Hide = !f.Hide
+	case fRowOwned:
+		if !u.env.RadarrOn() {
+			return
+		}
+		f.Owned = step(f.Owned, len(ownedSteps))
 	case fRowReset:
 		if k == BtnA {
 			*f = Filter{Sort: f.Sort}
@@ -652,6 +677,11 @@ func (u *UI) filterValue(row int) string {
 		return certSteps[f.Cert]
 	case fRowRuntime:
 		return runtimeSteps[f.Runtime]
+	case fRowOwned:
+		if !u.env.RadarrOn() {
+			return "SET UP RADARR FIRST"
+		}
+		return ownedSteps[f.Owned]
 	case fRowUnscored:
 		if f.Hide {
 			return "HIDE"
@@ -661,7 +691,7 @@ func (u *UI) filterValue(row int) string {
 	return "PRESS A"
 }
 
-var filterLabels = []string{"SORT BY", "GENRE", "SERVICE", "TOMATOMETER", "RATED", "RUNTIME", "NO RT SCORE", "RESET FILTERS"}
+var filterLabels = []string{"SORT BY", "GENRE", "SERVICE", "TOMATOMETER", "RATED", "RUNTIME", "NO RT SCORE", "MY LIBRARY", "RESET FILTERS"}
 
 // ---------- drawing ----------
 
@@ -690,6 +720,8 @@ func (u *UI) Draw(c *Canvas) {
 		u.drawMsg(c)
 	case modalFilter:
 		u.drawFilter(c)
+	case modalAdd:
+		u.drawAdd(c)
 	}
 	if u.toast != "" && time.Now().Before(u.toastUntil) && u.scr != scrBye {
 		t := u.fSmall.Ellipsize(u.toast, c.W-u.px(60))
@@ -763,7 +795,7 @@ func (u *UI) footer(c *Canvas, items [][2]string, right string, rightCol color.R
 			col = colPaperDim
 		case "X", "SEL":
 			col = colMagenta
-		case "Y", "L1", "R1", "L2", "R2", "◀▶", "L/R":
+		case "Y", "L1", "R1", "L2", "R2", "◀▶", "L/R", "L1·R1":
 			col = colCyan
 		}
 		x = c.Button(u.fTiny, x, y+u.px(8), it[0], it[1], col)
@@ -913,6 +945,18 @@ func (u *UI) drawList(c *Canvas) {
 			c.Text(u.fTiny, rx, y+u.px(8), ys, dim)
 			rx -= u.px(8)
 		}
+		if r, ok := u.inRadarr(m); ok {
+			mk, col := "○", colCyan
+			if r.HasFile {
+				mk, col = "●", colGreen
+			}
+			if isSel {
+				col = colBG
+			}
+			rx -= u.fSmall.Width(mk)
+			c.Text(u.fSmall, rx, y+u.px(5), mk, col)
+			rx -= u.px(6)
+		}
 		if m.Trailer != nil {
 			rx -= u.px(10)
 			col := colCyanDim
@@ -998,13 +1042,26 @@ func (u *UI) drawSidePanel(c *Canvas, m *Movie, x, y, w int) {
 	if len(names) == 0 && !m.HasDetails() {
 		names = []string{"…"}
 	}
+	maxSvc := 3
+	if _, ok := u.inRadarr(m); ok {
+		maxSvc = 2
+	}
 	for i, p := range names {
-		if i == 3 {
-			c.Text(u.fTiny, sx, sy, fmt.Sprintf("+%d MORE", len(names)-3), colCyanDim)
+		if i == maxSvc {
+			c.Text(u.fTiny, sx, sy, fmt.Sprintf("+%d MORE", len(names)-maxSvc), colCyanDim)
+			sy += u.fTiny.height + u.px(1)
 			break
 		}
 		c.Text(u.fSmall, sx, sy, u.fSmall.Ellipsize(strings.ToUpper(p), sw), colCyan)
 		sy += u.fSmall.height + u.px(1)
+	}
+	if r, ok := u.inRadarr(m); ok {
+		sy += u.px(3)
+		if r.HasFile {
+			c.Text(u.fTiny, sx, sy, "● IN YOUR LIBRARY", colGreen)
+		} else {
+			c.Text(u.fTiny, sx, sy, "○ IN RADARR", colCyan)
+		}
 	}
 
 	// title + liner notes under the poster
@@ -1186,6 +1243,9 @@ func (u *UI) drawDetail(c *Canvas) {
 	if !m.Released.IsZero() {
 		kv("DIGITAL", strings.ToUpper(m.Released.Format("Jan 2, 2006")), colPaper, 1)
 	}
+	if st, col := u.radarrStatus(m); st != "" {
+		kv("RADARR", st, col, 1)
+	}
 
 	// liner notes, full width under both columns
 	ny := max(y+u.px(4), fy+ph+u.px(40))
@@ -1242,7 +1302,14 @@ func (u *UI) drawDetail(c *Canvas) {
 	if m.Trailer == nil {
 		label = "STILLS"
 	}
-	u.footer(c, [][2]string{{"A", label}, {"L1", "PREV"}, {"R1", "NEXT"}, {"B", "BACK"}}, "", colPaperDim)
+	items := [][2]string{{"A", label}}
+	if u.env.RadarrOn() {
+		if _, ok := u.inRadarr(m); !ok {
+			items = append(items, [2]string{"X", "ADD TO RADARR"})
+		}
+	}
+	items = append(items, [2]string{"L1", "PREV"}, [2]string{"R1", "NEXT"}, [2]string{"B", "BACK"})
+	u.footer(c, items, "", colPaperDim)
 }
 
 func (u *UI) drawTrailer(c *Canvas) {
@@ -1373,7 +1440,13 @@ func (u *UI) drawTrailer(c *Canvas) {
 	if u.paused {
 		act = "PLAY"
 	}
-	u.footer(c, [][2]string{{"A", act}, {"◀▶", "STILL"}, {"L1", "PREV"}, {"R1", "NEXT"}, {"B", "STOP"}}, "", colPaperDim)
+	items := [][2]string{{"A", act}, {"◀▶", "STILL"}, {"L1·R1", "MOVIE"}}
+	if u.env.RadarrOn() {
+		if _, ok := u.inRadarr(m); !ok {
+			items = append(items, [2]string{"X", "RADARR"})
+		}
+	}
+	u.footer(c, append(items, [2]string{"B", "STOP"}), "", colPaperDim)
 }
 
 func (u *UI) drawSetup(c *Canvas) {

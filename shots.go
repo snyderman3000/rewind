@@ -149,6 +149,7 @@ func hsv(h, s, v float64) color.RGBA {
 }
 
 func demoScene(u *UI, scene string) {
+	u.env.Config.RadarrURL, u.env.Config.RadarrKey = "http://192.168.1.20:7878", "demo"
 	u.lib = demoLibrary()
 	u.frame = 3
 	u.scr = scrList
@@ -178,7 +179,25 @@ func demoScene(u *UI, scene string) {
 		}
 		return u.visible[0]
 	}
+	if u.env.RadarrOn() {
+		u.rad.lib = map[int]RadarrMovie{}
+		for _, m := range u.lib.Movies {
+			switch m.Title {
+			case "Paper Comets", "Cold Open":
+				u.rad.lib[m.ID] = RadarrMovie{ID: m.ID, TMDBID: m.ID, HasFile: true, Monitored: true}
+			case "A Quiet Frequency":
+				u.rad.lib[m.ID] = RadarrMovie{ID: m.ID, TMDBID: m.ID, Monitored: true}
+				u.rad.queue[m.ID] = &RadarrQueue{Size: 4e9, SizeLeft: 1.5e9, TimeLeft: "00:12:30", State: "downloading"}
+			}
+		}
+		u.rad.target = &RadarrTarget{Profile: RadarrProfile{ID: 4, Name: "HD-1080p"}, Folder: RadarrFolder{Path: "/movies", FreeSpace: 1_300_000_000_000}, Search: true}
+	}
 	switch scene {
+	case "add":
+		u.openDetail(pick("Neon Harbor"))
+		u.modal = modalAdd
+	case "detail-dl":
+		u.openDetail(pick("A Quiet Frequency"))
 	case "boot":
 		u.scr = scrBoot
 		u.frame = 11

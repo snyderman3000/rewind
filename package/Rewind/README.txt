@@ -8,7 +8,8 @@ subscription streaming service in your country now, with their Rotten
 Tomatoes Tomatometer, IMDb rating, Metascore, age rating, runtime, cast,
 director and which services carry them. Sort and filter by score, genre,
 service, rating and runtime. Each movie has a "trailer reel" of stills and
-a QR code that opens the real trailer on your phone.
+a QR code that opens the real trailer on your phone. If you run Radarr,
+press X on a movie to add it, and Radarr downloads it into your library.
 
 INSTALL
   1. Copy the "App" folder from this zip to the root of your SD card
@@ -27,8 +28,10 @@ CONTROLS
   LIST     Up/Down move · Left/Right page · A details
            L1/R1 genre · L2/R2 streaming service · Y sort
            X or START filters · SELECT refresh now · B exit
-  DETAILS  A trailer · Up/Down scroll synopsis · L1/R1 previous/next · B back
-  TRAILER  A pause/play · Left/Right still · L1/R1 previous/next · B back
+  DETAILS  A trailer · X add to Radarr · Y recheck Radarr
+           Up/Down scroll synopsis · L1/R1 previous/next · B back
+  TRAILER  A pause/play · Left/Right still · L1/R1 previous/next
+           X add to Radarr · B back
   MENU exits from anywhere.
 
 FILTERS (X)
@@ -48,6 +51,22 @@ SETTINGS  (App/Rewind/data/config.json)
                  (8 Netflix, 9 Prime Video, 337 Disney+, 15 Hulu,
                   1899 Max, 531 Paramount+, 386 Peacock, 350 Apple TV+)
   refresh_hours  how old the guide can get before it refreshes (default 6)
+
+RADARR (optional)
+  radarr_url              your Radarr address on the home network,
+                          e.g. http://192.168.1.20:7878 (add any URL base,
+                          like http://192.168.1.20:7878/radarr)
+  radarr_api_key          Radarr → Settings → General → API Key
+  radarr_quality_profile  profile name, e.g. "HD-1080p" (blank = first one)
+  radarr_root_folder      e.g. "/movies" (blank = first one)
+  radarr_search           false = add without searching right away
+  radarr_minimum_availability  released (default), inCinemas or announced
+
+  With Radarr set up, the shelf marks movies you already have
+  (● downloaded, ○ in Radarr, still coming), the details screen shows
+  download progress, and the filters can hide or show only what you have.
+  If Radarr's Connect settings notify Plex, new downloads show up in Plex
+  on their own. The Miyoo has to be on the same network as Radarr.
 
 ABOUT THE TRAILERS
   The Miyoo can't play YouTube video, so Rewind shows a slideshow of the

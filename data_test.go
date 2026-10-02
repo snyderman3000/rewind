@@ -240,7 +240,7 @@ func TestFilterAndSort(t *testing.T) {
 	}
 	ids := func(f Filter) string {
 		var s []string
-		for _, m := range f.Apply(ms) {
+		for _, m := range f.Apply(ms, nil) {
 			s = append(s, fmt.Sprint(m.ID))
 		}
 		return strings.Join(s, "")
