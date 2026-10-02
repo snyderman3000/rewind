@@ -2,7 +2,7 @@
 
 **New on streaming, for OnionOS on the Miyoo Mini Plus.** Rewind is a pocket video-store shelf: it lists movies that recently came out digitally and are on a subscription streaming service in your country, with their Rotten Tomatoes Tomatometer, IMDb rating, Metascore, age rating, runtime, cast and services. Sort and filter the shelf, and scan a QR code to watch any trailer on your phone.
 
-> 🤖 **Built by Claude.** Rewind was designed and written by [Claude](https://claude.ai), Anthropic's AI model, at the request of [@snyderman3000](https://github.com/snyderman3000). He came up with the idea and chose the direction. Claude wrote the code, the documentation and the artwork. It shares its look and rendering engine with [Mixtape](https://github.com/snyderman3000/mixtape). Please report bugs through [Issues](https://github.com/snyderman3000/rewind/issues).
+> 🤖 **Built by Claude.** Rewind was designed and written by [Claude](https://claude.ai), Anthropic's AI model, at the request of [@snyderman3000](https://github.com/snyderman3000). He came up with the idea and chose the direction. Claude wrote the code, the documentation and the artwork. It shares its rendering engine with [Mixtape](https://github.com/snyderman3000/mixtape). Please report bugs through [Issues](https://github.com/snyderman3000/rewind/issues).
 
 | | |
 |---|---|
@@ -22,7 +22,7 @@
 - **Trailers.** The Miyoo can't play YouTube, so each film gets a VCR-style reel of its stills, with a QR code beside it that opens the real trailer on your phone.
 - **Radarr button.** Point Rewind at your Radarr and press **X** on any movie (on the shelf, its details or its trailer) to add it. Radarr searches and downloads it, and it lands in Plex (or whatever watches that folder). The shelf marks what you already have, the details screen shows download progress, and a filter hides (or shows only) what's in your library.
 - **Fast and offline-friendly.** The guide is cached on the SD card, opens instantly, and refreshes itself in the background every few hours.
-- **80s video-store look.** Amber phosphor, scanlines, VHS tapes with spinning reels, VCR on-screen display and tracking noise.
+- **VCR front-panel look.** The screen sits inside a silver VCR deck: glowing vacuum-fluorescent clock and indicators, seven-segment scores, deck keys, a VHS tape that rewinds while the guide loads, plus VCR on-screen display, tracking noise and a blue-screen sign-off.
 
 ## Install
 
@@ -85,8 +85,8 @@ TMDB doesn't record the day a film was added to a service, so Rewind asks TMDB's
 | File | Purpose |
 |---|---|
 | `device.go` | Framebuffer output (rotated 180° for the Mini's panel) and button input, shared with Mixtape |
-| `gfx.go`, `gfx_vhs.go` | Software renderer: fonts, VHS tape, tomato badges, VU meter, QR codes, VCR effects |
-| `ui.go` | Screens and navigation |
+| `gfx.go`, `gfx_vhs.go`, `gfx_deck.go` | Software renderer: fonts, VHS tape, deck panels, seven-segment digits, tomato badges, QR codes, VCR effects |
+| `ui.go`, `ui_draw.go` | Navigation, and drawing each screen |
 | `tmdb.go` | Discover, details, genres, trailer and still selection |
 | `omdb.go` | Tomatometer, IMDb and Metascore |
 | `library.go` | Cached guide, background refresh, filtering and sorting |

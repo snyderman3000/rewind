@@ -1,6 +1,6 @@
 package main
 
-// Rewind's own widgets: VHS cassette, tomato badges, QR codes, VCR tracking noise.
+// Rewind's own widgets: tomato badges, QR codes, VCR tracking noise and OSD.
 
 import (
 	"image"
@@ -94,52 +94,6 @@ func (c *Canvas) Tomato(x, y, s, rt int) {
 			c.Circle(cx+dx, cy+dy, max(1, r/4), colSplat, true, 0)
 		}
 	}
-}
-
-// VHS draws a VHS cassette seen from the front: label, window with two reels.
-func (c *Canvas) VHS(x, y, w, h int, label, sub string, angle, progress float64, fLabel, fSub *Font) {
-	shell := rgb(0x14, 0x15, 0x18)
-	c.Fill(x, y, w, h, shell)
-	c.Border(x, y, w, h, 2, colGrid)
-	c.Fill(x+2, y+2, w-4, 2, rgb(0x26, 0x28, 0x2e)) // top bevel
-	// ridged grips at the sides
-	for i := 0; i < 5; i++ {
-		gy := y + h*30/100 + i*h/14
-		c.Fill(x+6, gy, w/24, 2, colGrid)
-		c.Fill(x+w-6-w/24, gy, w/24, 2, colGrid)
-	}
-	// label
-	lx, ly, lw, lh := x+w/9, y+h/12, w-2*w/9, h*36/100
-	c.Fill(lx, ly, lw, lh, colPaper)
-	sw := max(3, lh/9)
-	c.Fill(lx, ly+lh-3*sw-3, lw, sw, colAmber)
-	c.Fill(lx, ly+lh-2*sw-3, lw, sw, colMagenta)
-	c.Fill(lx, ly+lh-sw-3, lw, sw, colCyan)
-	c.Text(fLabel, lx+8, ly+4, fLabel.Ellipsize(label, lw-16), colBlack)
-	if sub != "" && 4+fLabel.height+fSub.height < lh-3*sw-3 {
-		c.Text(fSub, lx+8, ly+4+fLabel.height, fSub.Ellipsize(sub, lw-16), rgb(0x55, 0x50, 0x44))
-	}
-	// window
-	wx, wy := x+w*22/100, ly+lh+h/14
-	ww, wh := w*56/100, h-(wy-y)-h/7
-	c.Fill(wx, wy, ww, wh, colBG)
-	c.Border(wx, wy, ww, wh, 1, colGrid)
-	r := wh * 30 / 100
-	if r < 5 {
-		r = 5
-	}
-	cy := wy + wh/2
-	lcx, rcx := wx+ww*22/100, wx+ww*78/100
-	maxT := min(wh/2-2, ww*22/100-2)
-	lt := r + int(float64(maxT-r)*(1-progress))
-	rt := r + int(float64(maxT-r)*progress)
-	c.Reel(lcx, cy, r, angle, lt, colAmber, colAmberDim)
-	c.Reel(rcx, cy, r, angle, rt, colAmber, colAmberDim)
-	// tape across the bottom of the window
-	c.Fill(lcx, wy+wh-3, rcx-lcx, 2, colAmberDk)
-	// bottom flap
-	c.Fill(x+w/12, y+h-h/10, w-w/6, h/14, rgb(0x0e, 0x0f, 0x11))
-	c.Fill(x+w/12, y+h-h/10, w-w/6, 1, colGrid)
 }
 
 // QR draws text as a QR code with a white quiet zone, module px per cell. Returns the size drawn.

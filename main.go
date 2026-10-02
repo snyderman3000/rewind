@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const version = "0.2.3"
+const version = "0.3.0"
 const userAgent = "Rewind/" + version + " (OnionOS movie guide)"
 
 // Config lives in App/Rewind/data/config.json.

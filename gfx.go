@@ -285,7 +285,7 @@ func (f *Font) glyph(r rune) *glyph {
 // symbol synthesises UI glyphs the bundled fonts don't have (triangles, dots, arrows).
 func (f *Font) symbol(r rune) *glyph {
 	switch r {
-	case '▲', '▼', '●', '○', '◀', '▶', '↕', '→', '✓', '★':
+	case '▲', '▼', '●', '○', '◀', '▶', '↕', '→', '✓', '★', '⏏', '■', '❚':
 	default:
 		return nil
 	}
@@ -311,6 +311,18 @@ func (f *Font) symbol(r rune) *glyph {
 			switch r {
 			case '▲':
 				if math.Abs(fx-c) <= fy/2+0.5 {
+					set(x, y)
+				}
+			case '⏏':
+				if (fy < c*1.2 && math.Abs(fx-c) <= fy*0.9/1.2+0.5) || (fy >= c*1.5 && fy < c*1.95) {
+					set(x, y)
+				}
+			case '■':
+				if fx >= c*0.25 && fx <= c*1.75 && fy >= c*0.25 && fy <= c*1.75 {
+					set(x, y)
+				}
+			case '❚':
+				if math.Abs(fx-c) <= c*0.3 {
 					set(x, y)
 				}
 			case '▼':
@@ -467,95 +479,6 @@ func (f *Font) Wrap(s string, w int) []string {
 		out = append(out, line)
 	}
 	return out
-}
-
-// ---------- signature widgets ----------
-
-// Reel draws a cassette reel hub with spokes rotated by angle.
-func (c *Canvas) Reel(cx, cy, r int, angle float64, tape int, col, dim color.RGBA) {
-	if tape > r {
-		c.Circle(cx, cy, tape, colAmberDk, true, 0)
-		c.Circle(cx, cy, tape, mix(colAmberDk, colAmberDim, 0.5), false, 1)
-	}
-	c.Circle(cx, cy, r, colPanel2, true, 0)
-	c.Circle(cx, cy, r, col, false, 2)
-	c.Circle(cx, cy, r/3, dim, true, 0)
-	for i := 0; i < 6; i++ {
-		a := angle + float64(i)*math.Pi/3
-		x1 := cx + int(math.Cos(a)*float64(r/3))
-		y1 := cy + int(math.Sin(a)*float64(r/3))
-		x2 := cx + int(math.Cos(a)*float64(r-3))
-		y2 := cy + int(math.Sin(a)*float64(r-3))
-		if i%2 == 0 {
-			c.Line(x1, y1, x2, y2, col)
-			c.Line(x1+1, y1, x2+1, y2, col)
-		}
-	}
-	c.Circle(cx, cy, 3, colBG, true, 0)
-}
-
-// Cassette draws a stylised tape shell with a label and two reels.
-func (c *Canvas) Cassette(x, y, w, h int, label, sub string, angle, progress float64, fLabel, fSub *Font) {
-	c.Fill(x, y, w, h, colPanel2)
-	c.Border(x, y, w, h, 2, colAmberDim)
-	// screws
-	for _, p := range [][2]int{{x + 8, y + 8}, {x + w - 9, y + 8}, {x + 8, y + h - 9}, {x + w - 9, y + h - 9}} {
-		c.Circle(p[0], p[1], 3, colGrid, true, 0)
-	}
-	// label strip with retro stripes
-	lx, ly, lw, lh := x+16, y+12, w-32, h*44/100
-	c.Fill(lx, ly, lw, lh, colPaper)
-	stripeY := ly + lh - 14
-	c.Fill(lx, stripeY, lw, 4, colAmber)
-	c.Fill(lx, stripeY+4, lw, 4, colMagenta)
-	c.Fill(lx, stripeY+8, lw, 4, colCyan)
-	c.Text(fLabel, lx+8, ly+5, fLabel.Ellipsize(label, lw-16), colBlack)
-	c.Text(fSub, lx+8, ly+5+fLabel.height, fSub.Ellipsize(sub, lw-16), rgb(0x55, 0x50, 0x44))
-	// window
-	wy := ly + lh + 8
-	wh := h - (wy - y) - 16
-	wx, ww := x+w/2-w*30/100, w*60/100
-	c.Fill(wx, wy, ww, wh, colBG)
-	c.Border(wx, wy, ww, wh, 1, colGrid)
-	r := wh * 28 / 100
-	if r < 6 {
-		r = 6
-	}
-	cy := wy + wh/2
-	lcx, rcx := wx+ww/4, wx+ww*3/4
-	// tape spooled from left to right according to progress
-	maxT := wh/2 - 2
-	lt := r + int(float64(maxT-r)*(1-progress))
-	rt := r + int(float64(maxT-r)*progress)
-	c.Reel(lcx, cy, r, angle, lt, colAmber, colAmberDim)
-	c.Reel(rcx, cy, r, angle, rt, colAmber, colAmberDim)
-	// bottom trapezoid
-	c.Fill(x+w/2-w/4, y+h-12, w/2, 10, colPanel)
-	c.Border(x+w/2-w/4, y+h-12, w/2, 10, 1, colGrid)
-}
-
-// VU draws a segmented LED meter, lit fraction v in 0..1.
-func (c *Canvas) VU(x, y, w, h, segs int, v float64) {
-	gap := 3
-	sw := (w - gap*(segs-1)) / segs
-	lit := int(math.Round(v * float64(segs)))
-	for i := 0; i < segs; i++ {
-		col := colGreen
-		t := float64(i) / float64(segs)
-		switch {
-		case t > 0.85:
-			col = colRed
-		case t > 0.65:
-			col = colAmber
-		}
-		sx := x + i*(sw+gap)
-		if i < lit {
-			c.Fill(sx, y, sw, h, col)
-			c.Fill(sx, y, sw, 2, mix(col, colPaper, 0.5))
-		} else {
-			c.Fill(sx, y, sw, h, mix(colBG, col, 0.14))
-		}
-	}
 }
 
 // Button draws a controller button glyph with a caption and returns the x after it.

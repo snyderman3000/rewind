@@ -239,16 +239,23 @@ func demoScene(u *UI, scene string) {
 	}
 }
 
-// appIcon: a VHS tape with the stripe label, on transparent background.
+// appIcon: the BE KIND, REWIND tape on a transparent background.
 func appIcon(n int) *image.RGBA {
 	c := NewCanvas(n, n)
 	for i := range c.Pix {
 		c.Pix[i] = 0
 	}
-	f := loadFont(bodyTTF, float64(n)/7)
-	x, y, w, h := 2, n*18/100, n-4, n*64/100
-	c.VHS(x, y, w, h, "", "", 0.4, 0.35, f, f)
-	// a small play triangle on the label
-	c.PlayIcon(n/2-n/18, y+h/12+n/40, n/9, colBG)
+	h := n * 62 / 100
+	y := (n - h) / 2
+	c.VHSTape(1, y, n-2, h, "", nil, 0.3, 0.45, colLabelY)
+	// the label's two lines, hand-lettered small
+	lx, ly, lw, lh := 1+(n-2)*8/100, y+h*9/100, (n-2)*84/100, h*30/100
+	size := float64(n) * 0.12
+	f := loadFont(bodyTTF, size)
+	for f.Width("BE KIND, REWIND") > lw-3 && size > 4 {
+		size -= 0.25
+		f = loadFont(bodyTTF, size)
+	}
+	c.Text(f, lx+(lw-f.Width("BE KIND, REWIND"))/2, ly+(lh-f.height)/2, "BE KIND, REWIND", rgb(0x1a, 0x1a, 0x30))
 	return c.RGBA
 }

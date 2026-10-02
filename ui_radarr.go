@@ -96,18 +96,18 @@ func (u *UI) fetchQueue(m *Movie) {
 func (u *UI) radarrStatus(m *Movie) (string, color.RGBA) {
 	switch {
 	case !u.env.RadarrOn():
-		return "", colPaperDim
+		return "", colVFDDim
 	case u.rad.lib == nil && u.rad.syncing:
-		return "CHECKING…", colPaperDim
+		return "CHECKING…", colVFDDim
 	case u.rad.lib == nil:
-		return "UNREACHABLE", colMagenta
+		return "UNREACHABLE", colRec
 	}
 	r, ok := u.rad.lib[m.ID]
 	switch {
 	case !ok:
-		return "NOT IN YOUR LIBRARY · X TO ADD", colPaperDim
+		return "NOT RECORDED · X TO REC", colVFDMid
 	case r.HasFile:
-		return "● DOWNLOADED · IN YOUR LIBRARY", colGreen
+		return "● DOWNLOADED · IN YOUR LIBRARY", colVFD
 	}
 	if q := u.rad.queue[m.ID]; q != nil {
 		s := fmt.Sprintf("▼ DOWNLOADING %d%%", q.Percent())
@@ -117,12 +117,12 @@ func (u *UI) radarrStatus(m *Movie) (string, color.RGBA) {
 		if strings.EqualFold(q.State, "importPending") || strings.EqualFold(q.State, "importing") {
 			s = "▼ IMPORTING INTO LIBRARY"
 		}
-		return s, colAmber
+		return s, colDeckAmb
 	}
 	if !r.Monitored {
-		return "○ IN RADARR · NOT MONITORED", colPaperDim
+		return "○ IN RADARR · NOT MONITORED", colVFDMid
 	}
-	return "○ WANTED · RADARR IS LOOKING", colCyan
+	return "○ WANTED · RADARR IS LOOKING", colDeckAmb
 }
 
 // shortTimeLeft turns Radarr's "01:23:45" / "1.02:03:04" into "1H 23M".
@@ -242,8 +242,11 @@ func (u *UI) drawAdd(c *Canvas) {
 	if u.rad.addErr != "" {
 		h += u.px(56)
 	}
-	x, y := u.panel(c, w, h, colCyan)
-	c.TextGlow(u.fBig, x+u.px(20), y+u.px(14), "RECORD TO RADARR", colCyan)
+	x, y := u.panel(c, w, h, colRec)
+	if u.rad.adding && u.blink(6) || !u.rad.adding {
+		c.Circle(x+u.px(28), y+u.px(26), u.px(8), colRec, true, 0)
+	}
+	c.TextGlow(u.fBig, x+u.px(44), y+u.px(14), "REC TO RADARR", colRec)
 	ly := y + u.px(50)
 	title := strings.ToUpper(m.Title)
 	if m.Year > 0 {
@@ -253,31 +256,31 @@ func (u *UI) drawAdd(c *Canvas) {
 		if i == 2 {
 			break
 		}
-		c.Text(u.fBody, x+u.px(20), ly, l, colAmber)
+		c.TextGlow(u.fBody, x+u.px(20), ly, l, colVFD)
 		ly += u.fBody.height
 	}
 	ly += u.px(8)
 	kv := func(k, v string, col color.RGBA) {
-		c.Text(u.fTiny, x+u.px(20), ly+u.px(2), k, colPaperDim)
+		c.Text(u.fTiny, x+u.px(20), ly+u.px(2), k, colVFDDim)
 		c.Text(u.fSmall, x+u.px(110), ly, u.fSmall.Ellipsize(v, w-u.px(130)), col)
 		ly += u.fSmall.height + u.px(4)
 	}
 	dots := strings.Repeat("·", u.frame/3%4)
 	switch {
 	case u.rad.checking:
-		kv("RADARR", "CONNECTING"+dots, colAmber)
+		kv("RADARR", "CONNECTING"+dots, colDeckAmb)
 	case u.rad.target != nil:
 		t := u.rad.target
-		kv("QUALITY", t.Profile.Name, colPaper)
+		kv("QUALITY", t.Profile.Name, colVFD)
 		folder := t.Folder.Path
 		if t.Folder.FreeSpace > 0 {
 			folder += fmt.Sprintf("  (%s FREE)", humanBytes(t.Folder.FreeSpace))
 		}
-		kv("FOLDER", folder, colPaper)
+		kv("FOLDER", folder, colVFD)
 		if t.Search {
-			kv("THEN", "SEARCH AND DOWNLOAD NOW", colGreen)
+			kv("THEN", "SEARCH AND DOWNLOAD NOW", colDeckAmb)
 		} else {
-			kv("THEN", "WAIT FOR RADARR'S NEXT RSS CHECK", colPaper)
+			kv("THEN", "WAIT FOR RADARR'S NEXT RSS CHECK", colVFD)
 		}
 	}
 	if u.rad.addErr != "" {
@@ -285,25 +288,20 @@ func (u *UI) drawAdd(c *Canvas) {
 			if i == 3 {
 				break
 			}
-			c.Text(u.fSmall, x+u.px(20), ly, l, colMagenta)
+			c.Text(u.fSmall, x+u.px(20), ly, l, colRec)
 			ly += u.fSmall.height + u.px(1)
 		}
 	}
-	by := y + h - u.px(32)
+	by := y + h - u.px(28)
 	switch {
 	case u.rad.adding:
-		if u.frame/8%2 == 0 {
-			c.Circle(x+u.px(28), by+u.px(9), u.px(6), colRed, true, 0)
-		}
-		c.Text(u.fSmall, x+u.px(42), by, "SENDING"+dots, colRed)
+		c.Text(u.fSmall, x+u.px(20), by, "RECORDING"+dots, colRec)
 	case u.rad.target != nil:
-		bx := c.Button(u.fTiny, x+u.px(20), by, "A", "ADD TO RADARR", colCyan)
-		c.Button(u.fTiny, bx, by, "B", "CANCEL", colPaperDim)
+		c.Text(u.fTiny, x+u.px(20), by+u.px(2), "A ● REC     B CANCEL", colVFDMid)
 	case u.rad.addErr != "":
-		bx := c.Button(u.fTiny, x+u.px(20), by, "A", "RETRY", colAmber)
-		c.Button(u.fTiny, bx, by, "B", "CANCEL", colPaperDim)
+		c.Text(u.fTiny, x+u.px(20), by+u.px(2), "A RETRY     B CANCEL", colVFDMid)
 	default:
-		c.Button(u.fTiny, x+u.px(20), by, "B", "CANCEL", colPaperDim)
+		c.Text(u.fTiny, x+u.px(20), by+u.px(2), "B CANCEL", colVFDMid)
 	}
 }
 
