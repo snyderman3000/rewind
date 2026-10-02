@@ -1,0 +1,100 @@
+# REWIND
+
+**New on streaming, for OnionOS on the Miyoo Mini Plus.** Rewind is a pocket video-store shelf: it lists movies that recently came out digitally and are on a subscription streaming service in your country, with their Rotten Tomatoes Tomatometer, IMDb rating, Metascore, age rating, runtime, cast and services. Sort and filter the shelf, and scan a QR code to watch any trailer on your phone.
+
+> 🤖 **Built by Claude.** Rewind was designed and written by [Claude](https://claude.ai), Anthropic's AI model, at the request of [@snyderman3000](https://github.com/snyderman3000). He came up with the idea and chose the direction. Claude wrote the code, the documentation and the artwork. It shares its look and rendering engine with [Mixtape](https://github.com/snyderman3000/mixtape). Please report bugs through [Issues](https://github.com/snyderman3000/rewind/issues).
+
+| | |
+|---|---|
+| ![The shelf](docs/list.png) | ![Movie details](docs/detail.png) |
+| ![Trailer reel](docs/trailer.png) | ![Sort and filter](docs/filter.png) |
+
+*Screenshots use invented movies, scores and artwork.*
+
+## Features
+
+- **What's new on streaming.** Films whose digital release was in the last 120 days (configurable) and that Netflix, Prime Video, Disney+, Max, Hulu, Peacock, Paramount+, Apple TV+ or another subscription service carries in your region now.
+- **Scores.** Rotten Tomatoes Tomatometer (on an LED meter, of course), IMDb rating, Metascore and TMDB rating.
+- **The details.** Age rating, runtime, genres, director, writers, cast with roles, tagline, synopsis, digital release date and every service it's on.
+- **Sort** by Tomatometer, newest, popular, IMDb, Metascore, title or runtime.
+- **Filter** by genre, streaming service, minimum Tomatometer (60 / 75 / 90%), age rating (G, up to PG, up to PG-13, R only), runtime, and hide unscored films. Choices are remembered.
+- **Trailers.** The Miyoo can't play YouTube, so each film gets a VCR-style reel of its stills, with a QR code beside it that opens the real trailer on your phone.
+- **Fast and offline-friendly.** The guide is cached on the SD card, opens instantly, and refreshes itself in the background every few hours.
+- **80s video-store look.** Amber phosphor, scanlines, VHS tapes with spinning reels, VCR on-screen display and tracking noise.
+
+## Install
+
+1. Download `Rewind-vX.Y.Z-OnionOS.zip` from [Releases](https://github.com/snyderman3000/rewind/releases).
+2. Extract it and copy the `App` folder to the root of your SD card, merging it with the `App` folder already there.
+3. Get two free API keys:
+   - **TMDB** (required): [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api). Either the v3 API key or the v4 API Read Access Token works.
+   - **OMDb** (for Rotten Tomatoes, IMDb and Metacritic scores): [omdbapi.com/apikey.aspx](https://www.omdbapi.com/apikey.aspx). The free tier allows 1,000 lookups a day, which is plenty because Rewind caches scores.
+4. Copy `App/Rewind/config.example.json` to `App/Rewind/data/config.json` and paste in the keys. If you open Rewind first instead, it creates that file for you and shows QR codes for both sign-up pages.
+5. Turn Wi-Fi on and open **Apps → Rewind**. The first load takes about a minute.
+
+Requires OnionOS 4.2 or newer and Wi-Fi (Miyoo Mini Plus or Mini Flip).
+
+## Controls
+
+| Screen | Buttons |
+|---|---|
+| Shelf | ↑↓ move · ←→ page · **A** details · **L1/R1** genre · **L2/R2** service · **Y** sort · **X** / START filters · **SELECT** refresh · **B** exit |
+| Details | **A** trailer · ↑↓ scroll synopsis · **L1/R1** previous/next · **B** back |
+| Trailer | **A** pause/play · ←→ still · **L1/R1** previous/next · **B** back |
+
+MENU exits from anywhere.
+
+## Settings
+
+`App/Rewind/data/config.json`:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `tmdb_api_key` | | TMDB v3 key or v4 read access token |
+| `omdb_api_key` | | OMDb key |
+| `region` | `US` | Country for services and age ratings |
+| `language` | `en-US` | Language for titles and synopses |
+| `days` | `120` | How recent a digital release must be |
+| `max_movies` | `120` | How many films to keep (up to 400) |
+| `providers` | `[]` | Only these services, by TMDB id: 8 Netflix, 9 Prime Video, 337 Disney+, 15 Hulu, 1899 Max, 531 Paramount+, 386 Peacock, 350 Apple TV+ |
+| `refresh_hours` | `6` | How old the guide can get before it refreshes on launch |
+
+Logs are written to `App/Rewind/data/rewind.log`.
+
+## How "new on streaming" works
+
+TMDB doesn't record the day a film was added to a service, so Rewind asks TMDB's discover endpoint for films with a **digital** release in your region during the last `days` days that a **subscription** (flat-rate) service carries now, then reads each film's details and keeps only the ones with a service listed. Older catalog films newly added to a service won't appear. Scores come from OMDb, looked up by IMDb id.
+
+## How it works
+
+| File | Purpose |
+|---|---|
+| `device.go` | Framebuffer output (rotated 180° for the Mini's panel) and button input, shared with Mixtape |
+| `gfx.go`, `gfx_vhs.go` | Software renderer: fonts, VHS tape, tomato badges, VU meter, QR codes, VCR effects |
+| `ui.go` | Screens and navigation |
+| `tmdb.go` | Discover, details, genres, trailer and still selection |
+| `omdb.go` | Tomatometer, IMDb and Metascore |
+| `library.go` | Cached guide, background refresh, filtering and sorting |
+| `images.go` | Poster and still downloads, scaled and cached on the card |
+
+It compiles to a single static ARMv7 Go binary, with no SDL or C toolchain involved.
+
+## Building
+
+Requires Go 1.24 or newer.
+
+```sh
+./build.sh               # runs the tests, then builds dist/Rewind-vX.Y.Z-OnionOS.zip
+go run . -shot detail    # renders a demo screen to shot.png (boot|list|filter|detail|trailer|setup|bye)
+```
+
+## Credits and data
+
+- **Movie data and images:** [TMDB](https://www.themoviedb.org). This product uses the TMDB API but is not endorsed or certified by TMDB.
+- **Streaming availability:** [JustWatch](https://www.justwatch.com), via TMDB.
+- **Scores:** [OMDb API](https://www.omdbapi.com). Rewind isn't affiliated with Rotten Tomatoes, IMDb or Metacritic.
+- **Fonts:** Share Tech Mono, VT323 and Orbitron (SIL Open Font License).
+- **QR encoder:** adapted from [rsc.io/qr](https://github.com/rsc/qr) (BSD-3-Clause).
+- **CA certificates:** Mozilla bundle via curl (MPL 2.0).
+
+MIT licensed. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

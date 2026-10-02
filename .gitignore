@@ -1,0 +1,7 @@
+/dist/
+/package/Rewind/rewind
+/package/Rewind/data/
+/rewind
+go.work
+go.work.sum
+*.png.tmp

@@ -1,0 +1,10 @@
+{
+  "tmdb_api_key": "PASTE YOUR TMDB API KEY (OR READ ACCESS TOKEN) HERE",
+  "omdb_api_key": "PASTE YOUR OMDB API KEY HERE",
+  "region": "US",
+  "language": "en-US",
+  "days": 120,
+  "max_movies": 120,
+  "providers": [],
+  "refresh_hours": 6
+}
