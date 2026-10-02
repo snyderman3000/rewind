@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"image/png"
@@ -13,7 +15,7 @@ import (
 	"time"
 )
 
-const version = "0.2.0"
+const version = "0.2.1"
 const userAgent = "Rewind/" + version + " (OnionOS movie guide)"
 
 // Config lives in App/Rewind/data/config.json.
@@ -34,6 +36,8 @@ type Config struct {
 	RadarrRoot    string `json:"radarr_root_folder"`          // root folder path; blank = Radarr's first
 	RadarrSearch  *bool  `json:"radarr_search,omitempty"`     // search as soon as it's added (default true)
 	RadarrAvail   string `json:"radarr_minimum_availability"` // announced | inCinemas | released (default)
+
+	Problem string `json:"-"` // set when config.json couldn't be read, for the UI to show
 }
 
 func defaultConfig() Config {
@@ -80,6 +84,8 @@ func loadConfig(path string) Config {
 	}
 	if err := json.Unmarshal(b, &cfg); err != nil {
 		log.Printf("config.json is not valid JSON: %v", err)
+		cfg = defaultConfig()
+		cfg.Problem = configProblem(b, err)
 	}
 	d := defaultConfig()
 	cfg.TMDBKey = strings.TrimSpace(cfg.TMDBKey)
@@ -210,4 +216,39 @@ func main() {
 		time.Sleep(50 * time.Millisecond)
 	}
 	fb.Clear()
+}
+
+// configProblem explains a broken config.json in terms of lines a person can find.
+func configProblem(b []byte, err error) string {
+	var se *json.SyntaxError
+	var te *json.UnmarshalTypeError
+	switch {
+	case errors.As(err, &se):
+		off := int(se.Offset)
+		if off > len(b) {
+			off = len(b)
+		}
+		line := 1 + bytes.Count(b[:max(0, off-1)], []byte("\n"))
+		msg := se.Error()
+		if strings.Contains(msg, "after object key:value pair") {
+			// the usual slip: a missing comma at the end of the previous entry
+			prev := line - 1
+			for prev > 1 && strings.TrimSpace(lineOf(b, prev)) == "" {
+				prev--
+			}
+			return fmt.Sprintf("config.json has a missing comma at the end of line %d:\n%s\n\nAdd a comma there, save, and open Rewind again. Until then none of your settings are used.", prev, strings.TrimSpace(lineOf(b, prev)))
+		}
+		return fmt.Sprintf("config.json has a mistake near line %d (%s):\n%s\n\nFix it, save, and open Rewind again. Until then none of your settings are used.", line, msg, strings.TrimSpace(lineOf(b, line)))
+	case errors.As(err, &te):
+		return fmt.Sprintf("In config.json, %q should be a %s, not a %s (for example, numbers without quotes).", te.Field, te.Type, te.Value)
+	}
+	return "config.json couldn't be read: " + err.Error()
+}
+
+func lineOf(b []byte, n int) string {
+	lines := strings.Split(string(b), "\n")
+	if n < 1 || n > len(lines) {
+		return ""
+	}
+	return lines[n-1]
 }

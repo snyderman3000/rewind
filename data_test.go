@@ -349,3 +349,21 @@ func TestUIStartsAndLoadsPoster(t *testing.T) {
 		t.Errorf("cached start: scr %v refreshing %v", u2.scr, u2.refreshing)
 	}
 }
+
+func TestConfigProblems(t *testing.T) {
+	dir := t.TempDir()
+	p := dir + "/config.json"
+	writeFile(t, p, []byte("{\n  \"tmdb_api_key\": \"abc\",\n  \"refresh_hours\": 6\n  \"radarr_url\": \"http://x:7878\"\n}\n"))
+	cfg := loadConfig(p)
+	if !strings.Contains(cfg.Problem, "missing comma at the end of line 3") || !strings.Contains(cfg.Problem, `"refresh_hours": 6`) {
+		t.Errorf("problem %q", cfg.Problem)
+	}
+	writeFile(t, p, []byte(`{"days": "90"}`))
+	if cfg := loadConfig(p); !strings.Contains(cfg.Problem, `"days"`) {
+		t.Errorf("type problem %q", cfg.Problem)
+	}
+	writeFile(t, p, []byte(`{"tmdb_api_key": "abc", "radarr_url": "x"}`))
+	if cfg := loadConfig(p); cfg.Problem != "" || cfg.TMDBKey != "abc" {
+		t.Errorf("good config %+v", cfg)
+	}
+}

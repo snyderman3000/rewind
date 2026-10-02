@@ -108,6 +108,11 @@ func (u *UI) px(v int) int { return int(math.Round(float64(v) * u.s)) }
 // ---------- lifecycle ----------
 
 func (u *UI) Start() {
+	defer func() {
+		if p := u.env.Config.Problem; p != "" {
+			u.message("CONFIG ERROR", colMagenta, p)
+		}
+	}()
 	u.filter = u.env.LoadFilter()
 	u.lib = u.env.LoadLibrary()
 	u.env.PruneImageCache(60 << 20)
@@ -390,6 +395,10 @@ func (u *UI) Key(k int) {
 		switch k {
 		case BtnA, BtnStart:
 			u.env.Config = loadConfig(u.env.DataDir + "/config.json")
+			if p := u.env.Config.Problem; p != "" {
+				u.message("CONFIG ERROR", colMagenta, p)
+				return
+			}
 			if u.env.Config.TMDBKey == "" {
 				u.showToast("STILL NO TMDB KEY IN CONFIG.JSON")
 				return
