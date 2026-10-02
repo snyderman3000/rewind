@@ -205,7 +205,14 @@ func (env *Env) RadarrTarget(ctx context.Context) (*RadarrTarget, error) {
 	}
 	if t.Folder.Path == "" {
 		if wantDir != "" {
-			return nil, &APIError{"Radarr", 0, "Radarr has no root folder " + wantDir + " — add it in Radarr's Settings → Media Management"}
+			var paths []string
+			for _, f := range folders {
+				paths = append(paths, f.Path)
+			}
+			if len(paths) > 0 {
+				return nil, &APIError{"Radarr", 0, "Radarr has no root folder " + wantDir + " — it has: " + strings.Join(paths, ", ") + ". Put one of those in radarr_root_folder, or leave it blank to use the first."}
+			}
+			return nil, &APIError{"Radarr", 0, "Radarr has no root folders yet — add your movies folder in Radarr's Settings → Media Management → Root Folders"}
 		}
 		return nil, &APIError{"Radarr", 0, "Radarr has no usable root folder — add one in Settings → Media Management"}
 	}

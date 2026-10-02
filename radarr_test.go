@@ -127,7 +127,7 @@ func TestRadarrTargetAndAdd(t *testing.T) {
 	}
 	env.Config.RadarrProfile = ""
 	env.Config.RadarrRoot = "/nope"
-	if _, err := env.RadarrTarget(ctx); err == nil || !strings.Contains(err.Error(), "/nope") {
+	if _, err := env.RadarrTarget(ctx); err == nil || !strings.Contains(err.Error(), "/nope") || !strings.Contains(err.Error(), "/movies") {
 		t.Errorf("bad root: %v", err)
 	}
 	env.Config.RadarrRoot = ""
