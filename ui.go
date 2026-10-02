@@ -449,8 +449,13 @@ func (u *UI) keyList(k int) {
 		u.filter.Sort = (u.filter.Sort + 1) % numSorts
 		u.refilter(0)
 		u.showToast("SORTED BY " + sortNames[u.filter.Sort])
-	case BtnX, BtnStart:
+	case BtnStart:
 		u.modal = modalFilter
+	case BtnX:
+		if m := u.selected(); m != nil {
+			u.cur = m
+			u.openAdd(m)
+		}
 	case BtnSelect:
 		if u.refreshing {
 			u.showToast("ALREADY REWINDING…")
@@ -802,7 +807,9 @@ func (u *UI) footer(c *Canvas, items [][2]string, right string, rightCol color.R
 		switch it[0] {
 		case "B":
 			col = colPaperDim
-		case "X", "SEL":
+		case "X":
+			col = colCyan
+		case "SEL", "ST":
 			col = colMagenta
 		case "Y", "L1", "R1", "L2", "R2", "◀▶", "L/R", "L1·R1":
 			col = colCyan
@@ -810,7 +817,9 @@ func (u *UI) footer(c *Canvas, items [][2]string, right string, rightCol color.R
 		x = c.Button(u.fTiny, x, y+u.px(8), it[0], it[1], col)
 	}
 	if right != "" {
-		c.TextRight(u.fTiny, c.W-u.px(12), y+u.px(9), right, rightCol)
+		if room := c.W - u.px(12) - x; room > u.px(40) {
+			c.TextRight(u.fTiny, c.W-u.px(12), y+u.px(9), u.fTiny.Ellipsize(right, room), rightCol)
+		}
 	}
 }
 
@@ -882,7 +891,7 @@ func (u *UI) drawControls(c *Canvas) {
 	if extra > 0 {
 		fl = fmt.Sprintf("%d ON", extra)
 	}
-	seg("X", "FILTERS", fl, colMagenta)
+	seg("ST", "FILTERS", fl, colMagenta)
 	count := fmt.Sprintf("%03d", len(u.visible))
 	r := c.W - u.px(14)
 	c.TextRight(u.fTiny, r, y+u.px(4), "TAPES", colPaperDim)
@@ -919,7 +928,7 @@ func (u *UI) drawList(c *Canvas) {
 			c.TextCenter(u.fTiny, cx, top+u.px(90), msg, colAmberDim)
 		} else {
 			c.TextCenter(u.fBody, cx, top+u.px(60), "NOTHING MATCHES", colPaperDim)
-			c.TextCenter(u.fTiny, cx, top+u.px(90), "X TO LOOSEN THE FILTERS", colAmberDim)
+			c.TextCenter(u.fTiny, cx, top+u.px(90), "START TO LOOSEN THE FILTERS", colAmberDim)
 		}
 	}
 	for i := 0; i < rows && sc+i < n; i++ {
@@ -998,7 +1007,12 @@ func (u *UI) drawList(c *Canvas) {
 	case !u.lib.Updated.IsZero():
 		right = "GUIDE " + strings.ToUpper(u.lib.Updated.Local().Format("Jan 2 15:04"))
 	}
-	u.footer(c, [][2]string{{"A", "INFO"}, {"Y", "SORT"}, {"X", "FILTER"}, {"SEL", "REFRESH"}}, right, rcol)
+	items := [][2]string{{"A", "INFO"}}
+	if u.env.RadarrOn() {
+		items = append(items, [2]string{"X", "RADARR"})
+	}
+	items = append(items, [2]string{"Y", "SORT"}, [2]string{"ST", "FILTER"}, [2]string{"SEL", "REFRESH"})
+	u.footer(c, items, right, rcol)
 }
 
 func (u *UI) drawSidePanel(c *Canvas, m *Movie, x, y, w int) {
@@ -1313,7 +1327,9 @@ func (u *UI) drawDetail(c *Canvas) {
 	}
 	items := [][2]string{{"A", label}}
 	if u.env.RadarrOn() {
-		if _, ok := u.inRadarr(m); !ok {
+		if _, ok := u.inRadarr(m); ok {
+			items = append(items, [2]string{"X", "IN RADARR"})
+		} else {
 			items = append(items, [2]string{"X", "ADD TO RADARR"})
 		}
 	}
@@ -1451,9 +1467,7 @@ func (u *UI) drawTrailer(c *Canvas) {
 	}
 	items := [][2]string{{"A", act}, {"◀▶", "STILL"}, {"L1·R1", "MOVIE"}}
 	if u.env.RadarrOn() {
-		if _, ok := u.inRadarr(m); !ok {
-			items = append(items, [2]string{"X", "RADARR"})
-		}
+		items = append(items, [2]string{"X", "RADARR"})
 	}
 	u.footer(c, append(items, [2]string{"B", "STOP"}), "", colPaperDim)
 }

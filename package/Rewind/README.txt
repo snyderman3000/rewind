@@ -26,15 +26,15 @@ INSTALL
 
 CONTROLS
   LIST     Up/Down move · Left/Right page · A details
-           L1/R1 genre · L2/R2 streaming service · Y sort
-           X or START filters · SELECT refresh now · B exit
+           X add to Radarr · L1/R1 genre · L2/R2 streaming service
+           Y sort · START filters · SELECT refresh now · B exit
   DETAILS  A trailer · X add to Radarr · Y recheck Radarr
            Up/Down scroll synopsis · L1/R1 previous/next · B back
   TRAILER  A pause/play · Left/Right still · L1/R1 previous/next
            X add to Radarr · B back
   MENU exits from anywhere.
 
-FILTERS (X)
+FILTERS (START)
   Sort by Tomatometer, newest, popular, IMDb, Metascore, title or runtime.
   Filter by genre, service, minimum Tomatometer (60/75/90%), age rating
   (G, up to PG, up to PG-13, R only), runtime, and hide unscored movies.

@@ -20,7 +20,7 @@
 - **Sort** by Tomatometer, newest, popular, IMDb, Metascore, title or runtime.
 - **Filter** by genre, streaming service, minimum Tomatometer (60 / 75 / 90%), age rating (G, up to PG, up to PG-13, R only), runtime, and hide unscored films. Choices are remembered.
 - **Trailers.** The Miyoo can't play YouTube, so each film gets a VCR-style reel of its stills, with a QR code beside it that opens the real trailer on your phone.
-- **Radarr button.** Point Rewind at your Radarr and press **X** on any movie to add it. Radarr searches and downloads it, and it lands in Plex (or whatever watches that folder). The shelf marks what you already have, the details screen shows download progress, and a filter hides (or shows only) what's in your library.
+- **Radarr button.** Point Rewind at your Radarr and press **X** on any movie (on the shelf, its details or its trailer) to add it. Radarr searches and downloads it, and it lands in Plex (or whatever watches that folder). The shelf marks what you already have, the details screen shows download progress, and a filter hides (or shows only) what's in your library.
 - **Fast and offline-friendly.** The guide is cached on the SD card, opens instantly, and refreshes itself in the background every few hours.
 - **80s video-store look.** Amber phosphor, scanlines, VHS tapes with spinning reels, VCR on-screen display and tracking noise.
 
@@ -40,7 +40,7 @@ Requires OnionOS 4.2 or newer and Wi-Fi (Miyoo Mini Plus or Mini Flip).
 
 | Screen | Buttons |
 |---|---|
-| Shelf | ↑↓ move · ←→ page · **A** details · **L1/R1** genre · **L2/R2** service · **Y** sort · **X** / START filters · **SELECT** refresh · **B** exit |
+| Shelf | ↑↓ move · ←→ page · **A** details · **X** add to Radarr · **L1/R1** genre · **L2/R2** service · **Y** sort · **START** filters · **SELECT** refresh · **B** exit |
 | Details | **A** trailer · **X** add to Radarr · **Y** recheck Radarr · ↑↓ scroll synopsis · **L1/R1** previous/next · **B** back |
 | Trailer | **A** pause/play · ←→ still · **L1/R1** previous/next · **X** add to Radarr · **B** back |
 

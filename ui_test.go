@@ -64,9 +64,9 @@ func TestListKeys(t *testing.T) {
 	if u.filter.Genre != "" || len(u.visible) != n {
 		t.Errorf("L1 should go back to all genres")
 	}
-	u.Key(BtnX)
+	u.Key(BtnStart)
 	if u.modal != modalFilter {
-		t.Fatal("X opens filters")
+		t.Fatal("START opens filters")
 	}
 	u.Key(BtnDown) // genre
 	u.Key(BtnDown) // service
