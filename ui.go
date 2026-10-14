@@ -212,7 +212,7 @@ func (u *UI) refresh() {
 			case warn != "":
 				u.showToast(strings.ToUpper(shortErr(warn)))
 			case len(lib.Movies) == 0:
-				u.message("BLANK TAPE", colAmber, "TMDB didn't list any new digital releases on streaming services for your region. Try a bigger \"days\" value in App/Rewind/data/config.json.")
+				u.message("BLANK TAPE", colAmber, "TMDB didn't list any new digital releases for your region. Try a bigger \"days\" value in App/Rewind/data/config.json.")
 			default:
 				u.showToast(fmt.Sprintf("GUIDE UPDATED · %d TAPES", len(lib.Movies)))
 				u.hintOMDb()
@@ -602,6 +602,7 @@ const (
 	fRowSort = iota
 	fRowGenre
 	fRowService
+	fRowAvail
 	fRowRT
 	fRowCert
 	fRowRuntime
@@ -643,6 +644,8 @@ func (u *UI) keyFilter(k int) {
 		u.cycleFacet(&f.Genre, Facets(u.lib.Movies, genresOf), d > 0)
 	case fRowService:
 		u.cycleFacet(&f.Service, Facets(u.lib.Movies, servicesOf), d > 0)
+	case fRowAvail:
+		f.Avail = step(f.Avail, len(availSteps))
 	case fRowRT:
 		f.MinRT = step(f.MinRT, len(minRTSteps))
 	case fRowCert:
@@ -694,6 +697,8 @@ func (u *UI) filterValue(row int) string {
 			return "ALL SERVICES"
 		}
 		return strings.ToUpper(f.Service)
+	case fRowAvail:
+		return availSteps[f.Avail]
 	case fRowRT:
 		switch f.MinRT {
 		case 0:
@@ -728,7 +733,7 @@ func (u *UI) filterValue(row int) string {
 	return "PRESS A"
 }
 
-var filterLabels = []string{"SORT BY", "GENRE", "SERVICE", "TOMATOMETER", "RATED", "RUNTIME", "NO RT SCORE", "MY LIBRARY", "RESET FILTERS", "REFRESH GUIDE"}
+var filterLabels = []string{"SORT BY", "GENRE", "SERVICE", "WATCH ON", "TOMATOMETER", "RATED", "RUNTIME", "NO RT SCORE", "MY LIBRARY", "RESET FILTERS", "REFRESH GUIDE"}
 
 // ---------- device status ----------
 

@@ -79,7 +79,7 @@ func (u *UI) deckTop(c *Canvas) {
 	lx := u.px(18)
 	c.Text(u.fLogo, lx+1, u.px(14)+1, "REWIND", rgb(0xd8, 0xda, 0xde))
 	c.Text(u.fLogo, lx, u.px(14), "REWIND", colEngrave)
-	c.Text(u.fTiny, lx+u.px(2), u.px(40), "NEW ON STREAMING · 4 HEAD", rgb(0x44, 0x46, 0x4c))
+	c.Text(u.fTiny, lx+u.px(2), u.px(40), "NEW RELEASES · 4 HEAD", rgb(0x44, 0x46, 0x4c))
 	// tape slot and its flap; a tape sits in it while one is "playing"
 	sx, sy, sw, sh := u.px(196), u.px(14), u.px(204), u.px(30)
 	c.Fill(sx, sy, sw, sh, rgb(0x1a, 0x1b, 0x1e))
@@ -318,6 +318,11 @@ func (u *UI) drawList(c *Canvas) {
 			c.Text(u.fTiny, rx, y+u.px(8), mk, colDeckAmb)
 			rx -= u.px(8)
 		}
+		if m.HasDetails() && !m.Streaming() && len(m.Stores) > 0 {
+			rx -= u.fTiny.Width("$")
+			c.Text(u.fTiny, rx, y+u.px(8), "$", colVFDDim)
+			rx -= u.px(8)
+		}
 		title := u.fBody.Ellipsize(strings.ToUpper(m.Title), rx-tx)
 		if sel {
 			c.TextGlow(u.fBody, tx, y+u.px(2), title, colVFD)
@@ -395,17 +400,25 @@ func (u *UI) drawSidePanel(c *Canvas, m *Movie, x int) {
 	if len(names) == 0 && !m.HasDetails() {
 		names = []string{"…"}
 	}
-	if len(names) == 0 && u.search.on {
-		c.Text(u.fTiny, sx, sy, "NOT STREAMING", colVFDDim)
-		sy += u.fTiny.height + u.px(2)
+	show, pcol := 2, colDeckAmb
+	if len(names) == 0 && m.HasDetails() {
+		if len(m.Stores) == 0 {
+			c.Text(u.fTiny, sx, sy, "NOT STREAMING", colVFDDim)
+			sy += u.fTiny.height + u.px(2)
+		} else {
+			c.Text(u.fTiny, sx, sy, "RENT / BUY", colVFDDim)
+			sy += u.fTiny.height + u.px(2)
+			names = m.StoreNames()
+			show, pcol = 1, colVFD
+		}
 	}
 	for i, p := range names {
-		if i == 2 {
-			c.Text(u.fTiny, sx, sy, fmt.Sprintf("+%d MORE", len(names)-2), colVFDDim)
+		if i == show && len(names) > show {
+			c.Text(u.fTiny, sx, sy, fmt.Sprintf("+%d MORE", len(names)-show), colVFDDim)
 			sy += u.fTiny.height + u.px(2)
 			break
 		}
-		c.Text(u.fTiny, sx, sy, u.fTiny.Ellipsize(strings.ToUpper(p), sw), colDeckAmb)
+		c.Text(u.fTiny, sx, sy, u.fTiny.Ellipsize(strings.ToUpper(p), sw), pcol)
 		sy += u.fTiny.height + u.px(2)
 	}
 	if r, ok := u.inRadarr(m); ok {
@@ -576,6 +589,9 @@ func (u *UI) drawDetail(c *Canvas) {
 	kv("DIRECTOR", strings.Join(m.Directors, ", "), colVFD)
 	kv("STARRING", strings.Join(cast, ", "), colVFD)
 	kv("STREAMING", strings.ToUpper(strings.Join(m.ProviderNames(), " · ")), colDeckAmb)
+	if !m.Streaming() {
+		kv("RENT / BUY", strings.ToUpper(strings.Join(m.StoreNames(), " · ")), colVFD)
+	}
 	if !m.Released.IsZero() {
 		kv("DIGITAL", strings.ToUpper(m.Released.Format("Jan 2, 2006")), colVFD)
 	}

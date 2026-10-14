@@ -70,6 +70,7 @@ func TestListKeys(t *testing.T) {
 	}
 	u.Key(BtnDown) // genre
 	u.Key(BtnDown) // service
+	u.Key(BtnDown) // watch on
 	u.Key(BtnDown) // tomatometer
 	u.Key(BtnRight)
 	for _, m := range u.visible {
@@ -77,6 +78,7 @@ func TestListKeys(t *testing.T) {
 			t.Errorf("%s is %d%%", m.Title, m.RT)
 		}
 	}
+	u.Key(BtnUp)
 	u.Key(BtnUp)
 	u.Key(BtnUp)
 	u.Key(BtnUp)

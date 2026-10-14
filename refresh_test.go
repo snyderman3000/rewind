@@ -33,9 +33,10 @@ func busyCatalog(t *testing.T, now *time.Time, films map[int]*fakeFilm) *Env {
 		q := r.URL.Query()
 		gte, _ := time.Parse("2006-01-02", q.Get("release_date.gte"))
 		lte, _ := time.Parse("2006-01-02", q.Get("release_date.lte"))
+		rent := q.Get("with_watch_monetization_types") != "flatrate"
 		var ms []*fakeFilm
 		for _, f := range films {
-			if f.service && !f.digital.Before(gte) && !f.digital.After(lte) {
+			if (f.service || rent) && !f.digital.Before(gte) && !f.digital.After(lte) {
 				ms = append(ms, f)
 			}
 		}
@@ -121,6 +122,7 @@ func TestNewReleasesReachTheGuide(t *testing.T) {
 	now = now.AddDate(0, 0, 7)
 	films[603] = &fakeFilm{id: 603, title: "Next Week", digital: now.AddDate(0, 0, -2), pop: 3, service: true}
 	films[604] = &fakeFilm{id: 604, title: "Blockbuster", digital: now.AddDate(0, 0, -200), pop: 5000, service: true}
+	films[605] = &fakeFilm{id: 605, title: "Rental", digital: now.AddDate(0, 0, -1), pop: 4}
 	lib, _, err = env.Refresh(context.Background(), lib, func(Progress) {})
 	if err != nil {
 		t.Fatal(err)
@@ -137,6 +139,20 @@ func TestNewReleasesReachTheGuide(t *testing.T) {
 	}
 	if bn := byID(lib, 602); bn == nil || bn.Arrived() {
 		t.Errorf("Brand New should keep its first date")
+	}
+	if r := byID(lib, 605); r == nil || r.Streaming() {
+		t.Fatalf("a new rental should be listed: %+v", r)
+	}
+
+	// a week on, the rental reaches a subscription service
+	now = now.AddDate(0, 0, 7)
+	films[605].service = true
+	lib, _, err = env.Refresh(context.Background(), lib, func(Progress) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := byID(lib, 605); r == nil || !r.Streaming() || !r.Arrived() || !r.OnSince.Equal(time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("rental reaching a service not noticed: %+v", r)
 	}
 
 	// the cache keeps the arrival dates
@@ -185,7 +201,7 @@ func TestSearchMovies(t *testing.T) {
 	if len(ms) != 2 || ms[0].Title != "The Thing" || ms[0].Year != 1982 {
 		t.Fatalf("results %+v", ms)
 	}
-	if !ms[0].HasDetails() || ms[0].Runtime != 90 || len(ms[0].Providers) != 0 {
+	if !ms[0].HasDetails() || ms[0].Runtime != 90 || ms[0].Streaming() || len(ms[0].Stores) != 1 {
 		t.Errorf("details not read, or rent-only film shows a service: %+v", ms[0])
 	}
 	if len(ms[1].Providers) != 1 {

@@ -2,5 +2,5 @@
   "label": "Rewind",
   "icon": "/mnt/SDCARD/App/Rewind/icon.png",
   "launch": "launch.sh",
-  "description": "New movies on streaming, with Rotten Tomatoes scores"
+  "description": "New movie releases, streaming and rental, with Rotten Tomatoes scores"
 }

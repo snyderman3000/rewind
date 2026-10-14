@@ -1,10 +1,10 @@
-REWIND — new on streaming, for OnionOS (Miyoo Mini Plus)
-=========================================================
+REWIND — new movie releases, for OnionOS (Miyoo Mini Plus)
+============================================================
 Built by Claude, Anthropic's AI model, for snyderman3000.
 Source, updates and bug reports: https://github.com/snyderman3000/rewind
 
-Rewind lists movies that recently came out digitally and are on a
-subscription streaming service in your country now, with their Rotten
+Rewind lists movies that recently came out digitally in your country,
+on a streaming service or to rent or buy (rentals are marked $), with their Rotten
 Tomatoes Tomatometer, IMDb rating, Metascore, age rating, runtime, cast,
 director and which services carry them. Sort and filter by score, genre,
 service, rating and runtime. Each movie has a "trailer reel" of stills and
@@ -44,7 +44,8 @@ SEARCH (SELECT)
 
 MENU (START)
   Sort by Tomatometer, newest, popular, IMDb, Metascore, title or runtime.
-  Filter by genre, service, minimum Tomatometer (60/75/90%), age rating
+  Filter by genre, service or store, streaming vs. rental (WATCH ON),
+  minimum Tomatometer (60/75/90%), age rating
   (G, up to PG, up to PG-13, R only), runtime, and hide unscored movies.
   Your choices are remembered. REFRESH GUIDE (press A) reloads the guide
   now; it also refreshes by itself every few hours.
@@ -82,12 +83,13 @@ ABOUT THE TRAILERS
   film's stills in a VCR screen and a QR code: scan it with your phone to
   watch the real trailer.
 
-ABOUT "NEW ON STREAMING"
-  TMDB doesn't record the day a film was added to a service, so Rewind
-  takes films released digitally that a subscription service carries now:
-  the most popular from the last two weeks, from the last "days" days and
-  from the past year. When an older film shows up between refreshes it has
-  most likely just arrived on a service, so NEWEST puts it on top and its
+ABOUT "NEW"
+  Rewind takes films released digitally that you can stream, rent or buy
+  now: the most popular from the last two weeks and the last "days" days,
+  plus streaming releases from the same window and the past year. TMDB
+  doesn't record when a film reached a service, so when an older film
+  shows up between refreshes, or a rental moves to a service, it has most
+  likely just arrived, so NEWEST puts it on top and its
   details show an ARRIVED date.
 
 DATA

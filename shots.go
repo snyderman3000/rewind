@@ -56,6 +56,10 @@ func demoLibrary() *Library {
 		for k, s := range f.svc {
 			m.Providers = append(m.Providers, Provider{ID: 100 + k, Name: s})
 		}
+		if f.title == "Midnight Freight" || f.title == "Grand Delta Motel" { // new to rent, not streaming yet
+			m.Providers = nil
+			m.Stores = []Provider{{ID: 2, Name: "Apple TV"}, {ID: 10, Name: "Amazon Video"}, {ID: 3, Name: "Google Play"}}
+		}
 		for k := 0; k < 5; k++ {
 			m.Stills = append(m.Stills, "/still"+string(rune('a'+i))+string(rune('0'+k))+".jpg")
 		}
@@ -204,6 +208,8 @@ func demoScene(u *UI, scene string) {
 		u.prog = Progress{Phase: "COUNTING TOMATOES", Done: 37, Total: 120}
 	case "list":
 		pick("Neon Harbor")
+	case "rental":
+		pick("Midnight Freight")
 	case "loading":
 		u.sel = 4
 	case "filter":
@@ -211,7 +217,7 @@ func demoScene(u *UI, scene string) {
 		u.filter.Cert = 3
 		u.refilter(0)
 		u.modal = modalFilter
-		u.filterRow = 4
+		u.filterRow = fRowCert
 	case "family":
 		u.filter.Genre = "Family"
 		u.filter.Sort = SortRT

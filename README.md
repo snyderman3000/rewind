@@ -1,6 +1,6 @@
 # REWIND
 
-**New on streaming, for OnionOS on the Miyoo Mini Plus.** Rewind is a pocket video-store shelf: it lists movies that recently came out digitally and are on a subscription streaming service in your country, with their Rotten Tomatoes Tomatometer, IMDb rating, Metascore, age rating, runtime, cast and services. Sort and filter the shelf, and scan a QR code to watch any trailer on your phone.
+**New releases, for OnionOS on the Miyoo Mini Plus.** Rewind is a pocket video-store shelf: it lists movies that recently came out digitally in your country, whether they're on a streaming service or only to rent or buy, with their Rotten Tomatoes Tomatometer, IMDb rating, Metascore, age rating, runtime, cast and services. Sort and filter the shelf, and scan a QR code to watch any trailer on your phone.
 
 > 🤖 **Built by Claude.** Rewind was designed and written by [Claude](https://claude.ai), Anthropic's AI model, at the request of [@snyderman3000](https://github.com/snyderman3000). He came up with the idea and chose the direction. Claude wrote the code, the documentation and the artwork. It shares its rendering engine with [Mixtape](https://github.com/snyderman3000/mixtape). Please report bugs through [Issues](https://github.com/snyderman3000/rewind/issues).
 
@@ -14,12 +14,12 @@
 
 ## Features
 
-- **What's new on streaming.** Films whose digital release was in the last 120 days (configurable) and that Netflix, Prime Video, Disney+, Max, Hulu, Peacock, Paramount+, Apple TV+ or another subscription service carries in your region now.
+- **What's new.** Films whose digital release was in the last 120 days (configurable), whether Netflix, Prime Video, Disney+, Max, Hulu or another subscription service carries them or they're only to rent or buy (Apple TV, Amazon, Google Play and so on). Rentals are marked **$** on the shelf, and the **WATCH ON** filter shows streaming only, rentals only, or both.
 - **Scores.** Rotten Tomatoes Tomatometer (on an LED meter, of course), IMDb rating, Metascore and TMDB rating.
 - **The details.** Age rating, runtime, genres, director, writers, cast with roles, tagline, synopsis, digital release date and every service it's on.
 - **Search any movie.** Press **SELECT** and type a title on the on-screen keyboard to find any film, however old, with its scores, details and services. Press **X** on a result to record it to Radarr. Your last five searches are one press away.
 - **Sort** by Tomatometer, newest, popular, IMDb, Metascore, title or runtime.
-- **Filter** by genre, streaming service, minimum Tomatometer (60 / 75 / 90%), age rating (G, up to PG, up to PG-13, R only), runtime, and hide unscored films. Choices are remembered.
+- **Filter** by genre, service or store, streaming vs. rental, minimum Tomatometer (60 / 75 / 90%), age rating (G, up to PG, up to PG-13, R only), runtime, and hide unscored films. Choices are remembered.
 - **Trailers.** The Miyoo can't play YouTube, so each film gets a VCR-style reel of its stills, with a QR code beside it that opens the real trailer on your phone.
 - **Radarr button.** Point Rewind at your Radarr and press **X** on any movie (on the shelf, its details or its trailer) to add it. Radarr searches and downloads it, and it lands in Plex (or whatever watches that folder). The shelf marks what you already have, the details screen shows download progress, and a filter hides (or shows only) what's in your library.
 - **Fast and offline-friendly.** The guide is cached on the SD card, opens instantly, and refreshes itself in the background every few hours.
@@ -79,11 +79,11 @@ The shelf marks movies already in Radarr: **●** downloaded, **○** added but 
 
 Logs are written to `App/Rewind/data/rewind.log`.
 
-## How "new on streaming" works
+## How "new" works
 
-TMDB doesn't record the day a film was added to a service, so Rewind asks TMDB's discover endpoint for films with a **digital** release in your region that a **subscription** (flat-rate) service carries now, then reads each film's details and keeps only the ones with a service listed. It fills the guide from three windows, so neither end gets crowded out: the most popular releases of the last two weeks, then of the last `days` days, then of the past year (which catches big films that reach Netflix or Max months after their rental release).
+Rewind asks TMDB's discover endpoint for films with a **digital** release in your region that can be watched there now, on a subscription, free or ad-supported service or to rent or buy, then reads each film's details and keeps the ones with somewhere to watch them. It fills the guide in passes, so no group gets crowded out: the most popular releases of the last two weeks, then of the last `days` days, then streaming releases of the last `days` days (rentals outnumber them), then streaming releases of the past year (which catches big films that reach Netflix or Max months after their rental release).
 
-Rewind remembers when each film first appeared in its guide. When an older film turns up between refreshes, it has most likely just arrived on a service, so the **NEWEST** sort puts it at the top and its details show an **ARRIVED** date. (It can't tell that apart from a film that has only now become popular enough to be listed.) Scores come from OMDb, looked up by IMDb id.
+TMDB doesn't record the day a film was added to a service, so Rewind remembers when each film first appeared in its guide. When an older film turns up between refreshes, or a rental moves to a subscription service, it has most likely just arrived on a service, so the **NEWEST** sort puts it at the top and its details show an **ARRIVED** date. (It can't tell that apart from a film that has only now become popular enough to be listed.) Scores come from OMDb, looked up by IMDb id.
 
 ## How it works
 

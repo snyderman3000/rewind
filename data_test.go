@@ -28,10 +28,13 @@ func fakeAPIs(t *testing.T, omdbErr string) (*Env, *int32, *int32) {
 			fmt.Fprint(w, `{"status_code":7,"status_message":"Invalid API key: You must be granted a valid key."}`)
 			return
 		}
-		for k, v := range map[string]string{"with_release_type": "4", "watch_region": "US", "with_watch_monetization_types": "flatrate", "release_date.lte": "2026-10-01"} {
+		for k, v := range map[string]string{"with_release_type": "4", "watch_region": "US", "release_date.lte": "2026-10-01"} {
 			if q.Get(k) != v {
 				t.Errorf("discover %s = %q, want %q", k, q.Get(k), v)
 			}
+		}
+		if mt := q.Get("with_watch_monetization_types"); mt != streamOnly && mt != anyWay {
+			t.Errorf("monetization types %q", mt)
 		}
 		switch q.Get("release_date.gte") {
 		case "2026-09-17", "2026-06-03", "2025-10-01": // last 14 days, the 120-day window, last year
@@ -46,7 +49,8 @@ func fakeAPIs(t *testing.T, omdbErr string) (*Env, *int32, *int32) {
 		}
 		fmt.Fprint(w, `{"page":2,"total_pages":2,"results":[
 			{"id":103,"title":"Gamma","release_date":"2026-08-01","genre_ids":[18],"popularity":10},
-			{"id":101,"title":"Alpha dup","release_date":"2026-07-04","genre_ids":[28],"popularity":50}]}`)
+			{"id":101,"title":"Alpha dup","release_date":"2026-07-04","genre_ids":[28],"popularity":50},
+			{"id":104,"title":"Delta","release_date":"2026-08-02","genre_ids":[18],"popularity":9}]}`)
 	})
 	mux.HandleFunc("/3/movie/", func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&details, 1)
@@ -83,6 +87,8 @@ func fakeAPIs(t *testing.T, omdbErr string) (*Env, *int32, *int32) {
 			"watch/providers":{"results":{"US":{"flatrate":[{"provider_id":337,"provider_name":"Disney Plus","display_priority":1}]}}}}`)
 		case "103":
 			fmt.Fprint(w, `{"id":103,"title":"Gamma","imdb_id":"tt103","watch/providers":{"results":{"US":{"rent":[{"provider_id":2,"provider_name":"Apple TV"}]}}}}`)
+		case "104":
+			fmt.Fprint(w, `{"id":104,"title":"Delta","imdb_id":"tt104","watch/providers":{"results":{}}}`)
 		default:
 			w.WriteHeader(404)
 		}
@@ -133,8 +139,20 @@ func TestRefreshBuildsGuide(t *testing.T) {
 	if last.Phase != "COUNTING TOMATOES" || last.Done != last.Total {
 		t.Errorf("last progress %+v", last)
 	}
-	if len(lib.Movies) != 2 || byID(lib, 103) != nil {
-		t.Fatalf("want Alpha and Beta only (Gamma is rent-only), got %d movies", len(lib.Movies))
+	if len(lib.Movies) != 3 {
+		t.Fatalf("want Alpha, Beta and Gamma (rent-only), got %d movies", len(lib.Movies))
+	}
+	if g := byID(lib, 103); g.Streaming() || len(g.Stores) != 1 || g.Stores[0].Name != "Apple TV" {
+		t.Errorf("Gamma should be rent-only at Apple TV: %+v %+v", g.Providers, g.Stores)
+	}
+	if v := (Filter{Avail: 2}).Apply(lib.Movies, nil); len(v) != 1 || v[0].ID != 103 {
+		t.Errorf("RENT / BUY ONLY filter: %d", len(v))
+	}
+	if v := (Filter{Avail: 1}).Apply(lib.Movies, nil); len(v) != 2 {
+		t.Errorf("STREAMING ONLY filter: %d", len(v))
+	}
+	if v := (Filter{Service: "Apple TV"}).Apply(lib.Movies, nil); len(v) != 2 {
+		t.Errorf("service filter should match rental stores: %d", len(v))
 	}
 	a := byID(lib, 101)
 	if a.RT != 91 || a.Meta != 77 || a.IMDb != 7.6 {
@@ -165,13 +183,13 @@ func TestRefreshBuildsGuide(t *testing.T) {
 	if b.RT != -1 || b.Meta != -1 || b.IMDb != 6.1 || b.Cert != "PG" || b.Genres[0] != "Family" || b.ProviderNames()[0] != "Disney+" {
 		t.Errorf("beta %+v", b)
 	}
-	if atomic.LoadInt32(details) != 3 || atomic.LoadInt32(omdb) != 2 {
+	if atomic.LoadInt32(details) != 4 || atomic.LoadInt32(omdb) != 3 {
 		t.Errorf("requests: details %d omdb %d", *details, atomic.LoadInt32(omdb))
 	}
 
 	// cached: a second refresh re-reads the list but not fresh details or scores
 	lib2 := env.LoadLibrary()
-	if lib2.Source != "cache" || len(lib2.Movies) != 2 || byID(lib2, 101).RT != 91 {
+	if lib2.Source != "cache" || len(lib2.Movies) != 3 || byID(lib2, 101).RT != 91 {
 		t.Fatalf("cache didn't round-trip")
 	}
 	if env.NeedsRefresh(lib2) {
@@ -180,8 +198,8 @@ func TestRefreshBuildsGuide(t *testing.T) {
 	if _, _, err := env.Refresh(context.Background(), lib2, func(Progress) {}); err != nil {
 		t.Fatal(err)
 	}
-	// Gamma (103) was dropped, so it is looked up again; Alpha and Beta are not
-	if atomic.LoadInt32(details) != 4 || atomic.LoadInt32(omdb) != 2 {
+	// Delta (104) can't be watched anywhere, so it was dropped and is looked up again
+	if atomic.LoadInt32(details) != 5 || atomic.LoadInt32(omdb) != 3 {
 		t.Errorf("second refresh requests: details %d omdb %d", *details, atomic.LoadInt32(omdb))
 	}
 }
@@ -201,7 +219,7 @@ func TestOMDbLimitIsAWarning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(warn, "daily limit") || len(lib.Movies) != 2 || byID(lib, 101).RT != -1 {
+	if !strings.Contains(warn, "daily limit") || len(lib.Movies) != 3 || byID(lib, 101).RT != -1 {
 		t.Errorf("warn %q, %d movies", warn, len(lib.Movies))
 	}
 	if atomic.LoadInt32(omdb) > 4 {
@@ -335,7 +353,7 @@ func TestUIStartsAndLoadsPoster(t *testing.T) {
 		}
 	}
 	pump(func() bool { return !u.refreshing })
-	if u.scr != scrList || len(u.visible) != 2 || u.visible[0].Title != "Alpha" {
+	if u.scr != scrList || len(u.visible) != 3 || u.visible[0].Title != "Alpha" {
 		t.Fatalf("scr %v visible %d", u.scr, len(u.visible))
 	}
 	u.moved = time.Now().Add(-time.Second)
@@ -350,7 +368,7 @@ func TestUIStartsAndLoadsPoster(t *testing.T) {
 	// a second launch opens straight from the cache without a refresh
 	u2 := NewUI(env, 640, 480)
 	u2.Start()
-	if u2.scr != scrList || u2.refreshing || len(u2.visible) != 2 {
+	if u2.scr != scrList || u2.refreshing || len(u2.visible) != 3 {
 		t.Errorf("cached start: scr %v refreshing %v", u2.scr, u2.refreshing)
 	}
 }

@@ -56,7 +56,8 @@ type Movie struct {
 	Writers    []string     `json:"writers,omitempty"`
 	Cast       []CastMember `json:"cast,omitempty"`
 	Trailer    *Video       `json:"trailer,omitempty"`
-	Providers  []Provider   `json:"providers,omitempty"`
+	Providers  []Provider   `json:"providers,omitempty"` // subscription, free and ad-supported services
+	Stores     []Provider   `json:"stores,omitempty"`    // where it can be rented or bought
 	WatchLink  string       `json:"watch_link,omitempty"`
 	RT         int          `json:"rt"`   // Tomatometer 0-100, -1 unknown
 	Meta       int          `json:"meta"` // Metascore 0-100, -1 unknown
@@ -82,6 +83,17 @@ func (m *Movie) NewDate() time.Time {
 // Arrived reports whether the movie reached a service well after its digital release.
 func (m *Movie) Arrived() bool {
 	return !m.OnSince.IsZero() && m.OnSince.Sub(m.Released) > 3*24*time.Hour
+}
+
+// Streaming: on a subscription (or free) service, rather than only to rent or buy.
+func (m *Movie) Streaming() bool { return len(m.Providers) > 0 }
+
+func (m *Movie) StoreNames() []string {
+	var s []string
+	for _, p := range m.Stores {
+		s = append(s, p.Name)
+	}
+	return s
 }
 
 func (m *Movie) ProviderNames() []string {
@@ -230,6 +242,14 @@ func (env *Env) Refresh(ctx context.Context, old *Library, prog func(Progress)) 
 		}
 	}
 
+	// which movies were only for rent last time, to notice them reaching a service
+	rentOnly := map[int]bool{}
+	for _, m := range old.Movies {
+		if m.HasDetails() && !m.Streaming() {
+			rentOnly[m.ID] = true
+		}
+	}
+
 	// details, 4 at a time
 	var todo []*Movie
 	for _, m := range movies {
@@ -242,16 +262,16 @@ func (env *Env) Refresh(ctx context.Context, old *Library, prog func(Progress)) 
 		return nil, "", firstErr
 	}
 
-	// keep only movies that really are on a subscription service (TMDB's discover can lag)
+	// keep only movies that really can be watched somewhere (TMDB's discover can lag)
 	kept := make([]*Movie, 0, len(movies))
 	for _, m := range movies {
-		if m.HasDetails() && len(m.Providers) == 0 && len(env.Config.Providers) == 0 {
+		if m.HasDetails() && len(m.Providers) == 0 && len(m.Stores) == 0 && len(env.Config.Providers) == 0 {
 			continue
 		}
 		kept = append(kept, m)
 	}
 
-	known := env.markArrivals(old, kept)
+	known := env.markArrivals(old, kept, rentOnly)
 
 	// scores
 	todo = todo[:0]
@@ -279,11 +299,11 @@ func (env *Env) Refresh(ctx context.Context, old *Library, prog func(Progress)) 
 }
 
 // markArrivals sets OnSince on each movie. A movie the guide has carried before keeps its
-// date. A new one released digitally in the last two weeks gets its release date; an older
+// date, unless it was only for rent and is now on a service: then it arrived today. A new one released digitally in the last two weeks gets its release date; an older
 // one has just reached a subscription service (or only now got popular enough to be listed,
 // which Rewind can't tell apart), so it gets today. The very first refresh, and the first
 // after upgrading from 0.3, has nothing to compare with, so it uses release dates throughout.
-func (env *Env) markArrivals(old *Library, ms []*Movie) map[int]time.Time {
+func (env *Env) markArrivals(old *Library, ms []*Movie, rentOnly map[int]bool) map[int]time.Time {
 	now := env.Now()
 	known := map[int]time.Time{}
 	if old.Region == env.Config.Region {
@@ -297,6 +317,10 @@ func (env *Env) markArrivals(old *Library, ms []*Movie) map[int]time.Time {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	for _, m := range ms {
 		if t, ok := known[m.ID]; ok {
+			if rentOnly[m.ID] && m.Streaming() && m.HasDetails() {
+				t = today
+				known[m.ID] = t
+			}
 			m.OnSince = t
 			continue
 		}
@@ -322,10 +346,16 @@ func logNewest(found, kept []*Movie) {
 		}
 	}
 	if newest == nil {
-		log.Printf("refresh: %d found, none on a subscription service", len(found))
+		log.Printf("refresh: %d found, none available to watch", len(found))
 		return
 	}
-	log.Printf("refresh: %d found, %d on a service, newest %q (%s)", len(found), len(kept), newest.Title, newest.NewDate().Format("2006-01-02"))
+	stream := 0
+	for _, m := range kept {
+		if m.Streaming() {
+			stream++
+		}
+	}
+	log.Printf("refresh: %d found, %d kept (%d streaming, %d rent/buy), newest %q (%s)", len(found), len(kept), stream, len(kept)-stream, newest.Title, newest.NewDate().Format("2006-01-02"))
 }
 
 func countDetails(ms []*Movie) int {
@@ -419,13 +449,16 @@ type Filter struct {
 	Runtime int     `json:"runtime"` // index into runtimeSteps
 	Hide    bool    `json:"hide_unscored"`
 	Owned   int     `json:"radarr"` // index into ownedSteps
+	Avail   int     `json:"avail"`  // index into availSteps
 }
+
+var availSteps = []string{"STREAMING + RENTAL", "STREAMING ONLY", "RENT / BUY ONLY"}
 
 var ownedSteps = []string{"SHOW ALL", "HIDE WHAT I HAVE", "ONLY WHAT I HAVE"}
 
 func (f Filter) Active() int {
 	n := 0
-	for _, on := range []bool{f.Genre != "", f.Service != "", f.MinRT > 0, f.Cert > 0, f.Runtime > 0, f.Hide, f.Owned > 0} {
+	for _, on := range []bool{f.Genre != "", f.Service != "", f.MinRT > 0, f.Cert > 0, f.Runtime > 0, f.Hide, f.Owned > 0, f.Avail > 0} {
 		if on {
 			n++
 		}
@@ -439,7 +472,10 @@ func (f Filter) Match(m *Movie) bool {
 	if f.Genre != "" && !contains(m.Genres, f.Genre) {
 		return false
 	}
-	if f.Service != "" && !contains(m.ProviderNames(), f.Service) {
+	if f.Service != "" && !contains(servicesOf(m), f.Service) {
+		return false
+	}
+	if (f.Avail == 1 && !m.Streaming()) || (f.Avail == 2 && m.Streaming()) {
 		return false
 	}
 	if f.MinRT > 0 && m.RT < minRTSteps[f.MinRT] {
@@ -578,7 +614,7 @@ func Facets(ms []*Movie, key func(*Movie) []string) []string {
 }
 
 func genresOf(m *Movie) []string   { return m.Genres }
-func servicesOf(m *Movie) []string { return m.ProviderNames() }
+func servicesOf(m *Movie) []string { return append(m.ProviderNames(), m.StoreNames()...) }
 
 func (env *Env) statePath() string { return filepath.Join(env.DataDir, "state.json") }
 
@@ -601,6 +637,9 @@ func (env *Env) LoadFilter() Filter {
 	}
 	if f.Owned < 0 || f.Owned >= len(ownedSteps) {
 		f.Owned = 0
+	}
+	if f.Avail < 0 || f.Avail >= len(availSteps) {
+		f.Avail = 0
 	}
 	return f
 }

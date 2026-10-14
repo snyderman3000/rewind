@@ -129,9 +129,15 @@ type discoverPage struct {
 	Results      []tmdbResult `json:"results"`
 }
 
-// discoverQuery: digital releases from the last `days` days that are on a subscription
-// service in the region, most popular first.
-func (env *Env) discoverQuery(page, days int) url.Values {
+// Monetization types for discover: everything with a digital release, or subscription only.
+const (
+	anyWay     = "flatrate|free|ads|rent|buy"
+	streamOnly = "flatrate"
+)
+
+// discoverQuery: digital releases from the last `days` days that can be watched in the
+// region in one of the ways in types, most popular first.
+func (env *Env) discoverQuery(page, days int, types string) url.Values {
 	cfg := env.Config
 	now := env.Now()
 	q := url.Values{}
@@ -140,7 +146,7 @@ func (env *Env) discoverQuery(page, days int) url.Values {
 	q.Set("language", cfg.Language)
 	q.Set("region", cfg.Region)
 	q.Set("watch_region", cfg.Region)
-	q.Set("with_watch_monetization_types", "flatrate")
+	q.Set("with_watch_monetization_types", types)
 	q.Set("with_release_type", "4") // digital
 	q.Set("release_date.gte", now.AddDate(0, 0, -days).Format("2006-01-02"))
 	q.Set("release_date.lte", now.Format("2006-01-02"))
@@ -158,9 +164,10 @@ func (env *Env) discoverQuery(page, days int) url.Values {
 
 // A discover pass fills the guide up to upTo movies from releases of the last days days.
 type discoverPass struct {
-	name string
-	days int
-	upTo int
+	name  string
+	days  int
+	upTo  int
+	types string
 }
 
 // discoverPasses splits the guide between three windows. Taking only the most popular films
@@ -171,12 +178,14 @@ func (env *Env) discoverPasses() []discoverPass {
 	cfg := env.Config
 	n := cfg.MaxMovies
 	recent := min(14, cfg.Days)
-	ps := []discoverPass{{"LAST 14 DAYS", recent, max(1, n/3)}}
+	ps := []discoverPass{{"LAST 14 DAYS", recent, max(1, n/3), anyWay}}
 	if cfg.Days > recent {
-		ps = append(ps, discoverPass{fmt.Sprintf("LAST %d DAYS", cfg.Days), cfg.Days, max(1, n*4/5)})
+		ps = append(ps, discoverPass{fmt.Sprintf("LAST %d DAYS", cfg.Days), cfg.Days, max(1, n*3/5), anyWay})
 	}
+	// rentals outnumber streaming releases, so streaming gets slots of its own
+	ps = append(ps, discoverPass{fmt.Sprintf("STREAMING, LAST %d DAYS", cfg.Days), cfg.Days, max(1, n*4/5), streamOnly})
 	if cfg.Days < 365 {
-		ps = append(ps, discoverPass{"LAST YEAR", 365, n})
+		ps = append(ps, discoverPass{"STREAMING, LAST YEAR", 365, n, streamOnly})
 	}
 	ps[len(ps)-1].upTo = n
 	return ps
@@ -190,7 +199,7 @@ func (env *Env) Discover(ctx context.Context) ([]*Movie, error) {
 		before := len(out)
 		for page := 1; page <= 10 && len(out) < pass.upTo; page++ {
 			var dp discoverPage
-			if err := env.tmdbGet(ctx, "/discover/movie", env.discoverQuery(page, pass.days), &dp); err != nil {
+			if err := env.tmdbGet(ctx, "/discover/movie", env.discoverQuery(page, pass.days, pass.types), &dp); err != nil {
 				if len(out) > 0 {
 					log.Printf("discover %s page %d: %v", pass.name, page, err)
 					break // keep what we have
@@ -332,6 +341,8 @@ type tmdbDetails struct {
 			Flatrate []tmdbProvider `json:"flatrate"`
 			Free     []tmdbProvider `json:"free"`
 			Ads      []tmdbProvider `json:"ads"`
+			Rent     []tmdbProvider `json:"rent"`
+			Buy      []tmdbProvider `json:"buy"`
 		} `json:"results"`
 	} `json:"watch/providers"`
 	Images struct {
@@ -436,6 +447,7 @@ func applyDetails(m *Movie, d *tmdbDetails, region string) {
 	}
 	m.Trailer = pickTrailer(d.Videos.Results)
 	m.Providers = m.Providers[:0]
+	m.Stores = m.Stores[:0]
 	m.WatchLink = ""
 	if r, ok := d.Providers.Results[region]; ok {
 		m.WatchLink = r.Link
@@ -447,6 +459,16 @@ func applyDetails(m *Movie, d *tmdbDetails, region string) {
 				if name != "" && !seen[name] { // "Netflix" and "Netflix with Ads" are one service here
 					seen[name] = true
 					m.Providers = append(m.Providers, Provider{ID: p.ID, Name: name})
+				}
+			}
+		}
+		for _, list := range [][]tmdbProvider{r.Rent, r.Buy} {
+			sort.SliceStable(list, func(i, j int) bool { return list[i].Priority < list[j].Priority })
+			for _, p := range list {
+				name := cleanProvider(p.Name)
+				if name != "" && !seen[name] {
+					seen[name] = true
+					m.Stores = append(m.Stores, Provider{ID: p.ID, Name: name})
 				}
 			}
 		}
