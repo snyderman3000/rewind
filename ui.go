@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log"
 	"math"
 	"os"
 	"strings"
@@ -19,6 +20,7 @@ const (
 	scrList
 	scrDetail
 	scrTrailer
+	scrKeyboard
 	scrBye
 )
 
@@ -78,6 +80,9 @@ type UI struct {
 	omdbHinted bool
 
 	rad radarrUI
+
+	kb     keyboardState
+	search searchState
 
 	frame int
 	quit  bool
@@ -174,6 +179,7 @@ func (u *UI) refresh() {
 			cancel()
 			u.refreshing = false
 			if err != nil {
+				log.Printf("refresh failed: %v", err)
 				msg := netHint(err).Error()
 				if u.scr == scrBoot {
 					u.bootErr = msg
@@ -225,7 +231,11 @@ func shortErr(s string) string {
 
 // refilter recomputes the visible list, keeping the movie with id keep selected if possible.
 func (u *UI) refilter(keep int) {
-	u.visible = u.filter.Apply(u.lib.Movies, u.ownedFn())
+	if u.search.on {
+		u.visible = u.search.results // search results are shown as found, unfiltered
+	} else {
+		u.visible = u.filter.Apply(u.lib.Movies, u.ownedFn())
+	}
 	u.sel = 0
 	for i, m := range u.visible {
 		if m.ID == keep {
@@ -410,10 +420,15 @@ func (u *UI) Key(k int) {
 		u.keyDetail(k)
 	case scrTrailer:
 		u.keyTrailer(k)
+	case scrKeyboard:
+		u.keyKeyboard(k)
 	}
 }
 
 func (u *UI) keyList(k int) {
+	if u.search.on && u.keySearchList(k) {
+		return
+	}
 	n := len(u.visible)
 	move := func(to int) {
 		if n == 0 {
@@ -449,11 +464,7 @@ func (u *UI) keyList(k int) {
 			u.openAdd(m)
 		}
 	case BtnSelect:
-		if u.refreshing {
-			u.showToast("ALREADY REWINDING…")
-		} else {
-			u.refresh()
-		}
+		u.openKeyboard()
 	case BtnA:
 		if m := u.selected(); m != nil {
 			u.openDetail(m)
@@ -597,6 +608,7 @@ const (
 	fRowUnscored
 	fRowOwned
 	fRowReset
+	fRowRefresh
 	fRows
 )
 
@@ -648,6 +660,17 @@ func (u *UI) keyFilter(k int) {
 		if k == BtnA {
 			*f = Filter{Sort: f.Sort}
 		}
+	case fRowRefresh:
+		if k == BtnA {
+			u.modal = modalNone
+			u.saveState()
+			if u.refreshing {
+				u.showToast("ALREADY REWINDING…")
+			} else {
+				u.refresh()
+			}
+		}
+		return
 	}
 	keep := 0
 	if m := u.selected(); m != nil {
@@ -694,10 +717,18 @@ func (u *UI) filterValue(row int) string {
 		}
 		return "SHOW"
 	}
+	if row == fRowRefresh {
+		if u.refreshing {
+			return "REWINDING…"
+		}
+		if !u.lib.Updated.IsZero() {
+			return "PRESS A · UPDATED " + strings.ToUpper(u.lib.Updated.Local().Format("Jan 2 3:04PM"))
+		}
+	}
 	return "PRESS A"
 }
 
-var filterLabels = []string{"SORT BY", "GENRE", "SERVICE", "TOMATOMETER", "RATED", "RUNTIME", "NO RT SCORE", "MY LIBRARY", "RESET FILTERS"}
+var filterLabels = []string{"SORT BY", "GENRE", "SERVICE", "TOMATOMETER", "RATED", "RUNTIME", "NO RT SCORE", "MY LIBRARY", "RESET FILTERS", "REFRESH GUIDE"}
 
 // ---------- device status ----------
 

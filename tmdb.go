@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -122,26 +123,15 @@ func (env *Env) tmdbGet(ctx context.Context, path string, q url.Values, v any) e
 }
 
 type discoverPage struct {
-	Page         int `json:"page"`
-	TotalPages   int `json:"total_pages"`
-	TotalResults int `json:"total_results"`
-	Results      []struct {
-		ID         int     `json:"id"`
-		Title      string  `json:"title"`
-		Release    string  `json:"release_date"`
-		Poster     string  `json:"poster_path"`
-		Backdrop   string  `json:"backdrop_path"`
-		Overview   string  `json:"overview"`
-		GenreIDs   []int   `json:"genre_ids"`
-		Popularity float64 `json:"popularity"`
-		VoteAvg    float64 `json:"vote_average"`
-		VoteCount  int     `json:"vote_count"`
-		Adult      bool    `json:"adult"`
-	} `json:"results"`
+	Page         int          `json:"page"`
+	TotalPages   int          `json:"total_pages"`
+	TotalResults int          `json:"total_results"`
+	Results      []tmdbResult `json:"results"`
 }
 
-// discoverQuery: digital releases in the window that are on a subscription service in the region.
-func (env *Env) discoverQuery(page int) url.Values {
+// discoverQuery: digital releases from the last `days` days that are on a subscription
+// service in the region, most popular first.
+func (env *Env) discoverQuery(page, days int) url.Values {
 	cfg := env.Config
 	now := env.Now()
 	q := url.Values{}
@@ -152,7 +142,7 @@ func (env *Env) discoverQuery(page int) url.Values {
 	q.Set("watch_region", cfg.Region)
 	q.Set("with_watch_monetization_types", "flatrate")
 	q.Set("with_release_type", "4") // digital
-	q.Set("release_date.gte", now.AddDate(0, 0, -cfg.Days).Format("2006-01-02"))
+	q.Set("release_date.gte", now.AddDate(0, 0, -days).Format("2006-01-02"))
 	q.Set("release_date.lte", now.Format("2006-01-02"))
 	q.Set("sort_by", "popularity.desc")
 	q.Set("page", strconv.Itoa(page))
@@ -166,36 +156,109 @@ func (env *Env) discoverQuery(page int) url.Values {
 	return q
 }
 
-// Discover returns up to MaxMovies basic entries, most popular first.
+// A discover pass fills the guide up to upTo movies from releases of the last days days.
+type discoverPass struct {
+	name string
+	days int
+	upTo int
+}
+
+// discoverPasses splits the guide between three windows. Taking only the most popular films
+// of the whole window (as 0.3 did) let older, established films crowd out the newest ones, and
+// left out big films that reached a subscription service months after their rental release.
+// So: the last two weeks first, then the configured window, then the past year.
+func (env *Env) discoverPasses() []discoverPass {
+	cfg := env.Config
+	n := cfg.MaxMovies
+	recent := min(14, cfg.Days)
+	ps := []discoverPass{{"LAST 14 DAYS", recent, max(1, n/3)}}
+	if cfg.Days > recent {
+		ps = append(ps, discoverPass{fmt.Sprintf("LAST %d DAYS", cfg.Days), cfg.Days, max(1, n*4/5)})
+	}
+	if cfg.Days < 365 {
+		ps = append(ps, discoverPass{"LAST YEAR", 365, n})
+	}
+	ps[len(ps)-1].upTo = n
+	return ps
+}
+
+// Discover returns up to MaxMovies basic entries.
 func (env *Env) Discover(ctx context.Context) ([]*Movie, error) {
 	var out []*Movie
 	seen := map[int]bool{}
-	for page := 1; page <= 20 && len(out) < env.Config.MaxMovies; page++ {
-		var dp discoverPage
-		if err := env.tmdbGet(ctx, "/discover/movie", env.discoverQuery(page), &dp); err != nil {
-			if page > 1 && len(out) > 0 {
-				break // keep what we have
+	for _, pass := range env.discoverPasses() {
+		before := len(out)
+		for page := 1; page <= 10 && len(out) < pass.upTo; page++ {
+			var dp discoverPage
+			if err := env.tmdbGet(ctx, "/discover/movie", env.discoverQuery(page, pass.days), &dp); err != nil {
+				if len(out) > 0 {
+					log.Printf("discover %s page %d: %v", pass.name, page, err)
+					break // keep what we have
+				}
+				return nil, err
 			}
-			return nil, err
-		}
-		for _, r := range dp.Results {
-			if seen[r.ID] || r.Adult || r.Title == "" {
-				continue
+			for _, r := range dp.Results {
+				if seen[r.ID] || r.Adult || r.Title == "" {
+					continue
+				}
+				seen[r.ID] = true
+				out = append(out, movieFromResult(r))
+				if len(out) >= pass.upTo {
+					break
+				}
 			}
-			seen[r.ID] = true
-			m := &Movie{ID: r.ID, Title: r.Title, Poster: r.Poster, Backdrop: r.Backdrop,
-				Overview: r.Overview, GenreIDs: r.GenreIDs, Popularity: r.Popularity,
-				VoteAvg: r.VoteAvg, VoteCount: r.VoteCount, RT: -1, Meta: -1}
-			if t, err := time.Parse("2006-01-02", r.Release); err == nil {
-				m.Year = t.Year()
-				m.Released = t
-			}
-			out = append(out, m)
-			if len(out) >= env.Config.MaxMovies {
+			if page >= dp.TotalPages {
 				break
 			}
 		}
-		if page >= dp.TotalPages {
+		log.Printf("discover %s: +%d", pass.name, len(out)-before)
+	}
+	return out, nil
+}
+
+type tmdbResult struct {
+	ID         int     `json:"id"`
+	Title      string  `json:"title"`
+	Release    string  `json:"release_date"`
+	Poster     string  `json:"poster_path"`
+	Backdrop   string  `json:"backdrop_path"`
+	Overview   string  `json:"overview"`
+	GenreIDs   []int   `json:"genre_ids"`
+	Popularity float64 `json:"popularity"`
+	VoteAvg    float64 `json:"vote_average"`
+	VoteCount  int     `json:"vote_count"`
+	Adult      bool    `json:"adult"`
+}
+
+func movieFromResult(r tmdbResult) *Movie {
+	m := &Movie{ID: r.ID, Title: r.Title, Poster: r.Poster, Backdrop: r.Backdrop,
+		Overview: r.Overview, GenreIDs: r.GenreIDs, Popularity: r.Popularity,
+		VoteAvg: r.VoteAvg, VoteCount: r.VoteCount, RT: -1, Meta: -1}
+	if t, err := time.Parse("2006-01-02", r.Release); err == nil {
+		m.Year = t.Year()
+		m.Released = t
+	}
+	return m
+}
+
+// SearchMovies finds movies of any age by title, best matches first, and reads their details.
+func (env *Env) SearchMovies(ctx context.Context, query string) ([]*Movie, error) {
+	q := url.Values{}
+	q.Set("query", query)
+	q.Set("include_adult", "false")
+	q.Set("language", env.Config.Language)
+	q.Set("page", "1")
+	var dp discoverPage
+	if err := env.tmdbGet(ctx, "/search/movie", q, &dp); err != nil {
+		return nil, err
+	}
+	var out []*Movie
+	for _, r := range dp.Results {
+		if r.Adult || r.Title == "" {
+			continue
+		}
+		out = append(out, movieFromResult(r))
+		if len(out) == 20 {
 			break
 		}
 	}

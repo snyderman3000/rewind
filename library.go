@@ -63,11 +63,26 @@ type Movie struct {
 	IMDb       float64      `json:"imdb"` // 0 unknown
 	IMDbVotes  string       `json:"imdb_votes,omitempty"`
 	Awards     string       `json:"awards,omitempty"`
+	OnSince    time.Time    `json:"on_since,omitempty"` // when Rewind first saw it on a subscription service
 	DetailAt   time.Time    `json:"detail_at"`
 	ScoresAt   time.Time    `json:"scores_at"`
 }
 
 func (m *Movie) HasDetails() bool { return !m.DetailAt.IsZero() }
+
+// NewDate is what the NEWEST sort uses: the day the movie turned up on a service when
+// Rewind saw that happen, otherwise its digital release.
+func (m *Movie) NewDate() time.Time {
+	if m.OnSince.After(m.Released) {
+		return m.OnSince
+	}
+	return m.Released
+}
+
+// Arrived reports whether the movie reached a service well after its digital release.
+func (m *Movie) Arrived() bool {
+	return !m.OnSince.IsZero() && m.OnSince.Sub(m.Released) > 3*24*time.Hour
+}
 
 func (m *Movie) ProviderNames() []string {
 	var s []string
@@ -83,7 +98,10 @@ type Library struct {
 	Updated time.Time      `json:"updated"`
 	Region  string         `json:"region"`
 	Days    int            `json:"days"`
-	Source  string         `json:"-"` // "live", "cache", "empty"
+	// Known: every movie the guide has carried, with the day it first appeared, so a film that
+	// drops out of the guide and comes back isn't mistaken for a new arrival.
+	Known  map[int]time.Time `json:"known,omitempty"`
+	Source string            `json:"-"` // "live", "cache", "empty"
 }
 
 func (env *Env) libraryPath() string { return filepath.Join(env.DataDir, "library.json") }
@@ -233,6 +251,8 @@ func (env *Env) Refresh(ctx context.Context, old *Library, prog func(Progress)) 
 		kept = append(kept, m)
 	}
 
+	known := env.markArrivals(old, kept)
+
 	// scores
 	todo = todo[:0]
 	for _, m := range kept {
@@ -246,8 +266,9 @@ func (env *Env) Refresh(ctx context.Context, old *Library, prog func(Progress)) 
 	if ctx.Err() != nil {
 		return nil, "", ctx.Err()
 	}
-	lib = &Library{Movies: kept, Genres: genres, Updated: env.Now(), Region: env.Config.Region, Days: env.Config.Days, Source: "live"}
+	lib = &Library{Movies: kept, Genres: genres, Updated: env.Now(), Region: env.Config.Region, Days: env.Config.Days, Known: known, Source: "live"}
 	lib.fillGenres()
+	logNewest(found, kept)
 	if err := env.SaveLibrary(lib); err != nil {
 		log.Printf("saving library: %v", err)
 	}
@@ -255,6 +276,56 @@ func (env *Env) Refresh(ctx context.Context, old *Library, prog func(Progress)) 
 		warn = netHint(firstErr).Error()
 	}
 	return lib, warn, nil
+}
+
+// markArrivals sets OnSince on each movie. A movie the guide has carried before keeps its
+// date. A new one released digitally in the last two weeks gets its release date; an older
+// one has just reached a subscription service (or only now got popular enough to be listed,
+// which Rewind can't tell apart), so it gets today. The very first refresh, and the first
+// after upgrading from 0.3, has nothing to compare with, so it uses release dates throughout.
+func (env *Env) markArrivals(old *Library, ms []*Movie) map[int]time.Time {
+	now := env.Now()
+	known := map[int]time.Time{}
+	if old.Region == env.Config.Region {
+		for id, t := range old.Known {
+			if now.Sub(t) < 400*24*time.Hour {
+				known[id] = t
+			}
+		}
+	}
+	seeding := len(known) == 0
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	for _, m := range ms {
+		if t, ok := known[m.ID]; ok {
+			m.OnSince = t
+			continue
+		}
+		t := m.Released
+		if !seeding && (t.IsZero() || now.Sub(t) > 14*24*time.Hour) {
+			t = today
+		}
+		if t.IsZero() {
+			t = today
+		}
+		m.OnSince = t
+		known[m.ID] = t
+	}
+	return known
+}
+
+// logNewest notes what a refresh found, so rewind.log shows whether the guide moved on.
+func logNewest(found, kept []*Movie) {
+	var newest *Movie
+	for _, m := range kept {
+		if newest == nil || m.NewDate().After(newest.NewDate()) {
+			newest = m
+		}
+	}
+	if newest == nil {
+		log.Printf("refresh: %d found, none on a subscription service", len(found))
+		return
+	}
+	log.Printf("refresh: %d found, %d on a service, newest %q (%s)", len(found), len(kept), newest.Title, newest.NewDate().Format("2006-01-02"))
 }
 
 func countDetails(ms []*Movie) int {
@@ -441,8 +512,8 @@ func (f Filter) Apply(all []*Movie, owned func(*Movie) bool) []*Movie {
 			}
 			return a.Popularity > b.Popularity
 		case SortNewest:
-			if !a.Released.Equal(b.Released) {
-				return a.Released.After(b.Released)
+			if da, db := a.NewDate(), b.NewDate(); !da.Equal(db) {
+				return da.After(db)
 			}
 		case SortIMDb:
 			if a.IMDb != b.IMDb {
@@ -537,4 +608,29 @@ func (env *Env) LoadFilter() Filter {
 func (env *Env) SaveFilter(f Filter) {
 	b, _ := json.MarshalIndent(f, "", "  ")
 	os.WriteFile(env.statePath(), b, 0o644)
+}
+
+// SearchResults looks movies up by title and reads their details and scores, for the
+// search shelf. Results aren't kept in the guide.
+func (env *Env) SearchResults(ctx context.Context, query string, prog func(Progress)) ([]*Movie, error) {
+	prog(Progress{Phase: "SEARCHING"})
+	ms, err := env.SearchMovies(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	if err := env.parallel(ctx, ms, "READING LABELS", prog, env.Details); err != nil && countDetails(ms) == 0 {
+		return nil, err
+	}
+	var todo []*Movie
+	for _, m := range ms {
+		if env.scoresStale(m) {
+			todo = append(todo, m)
+		}
+	}
+	env.parallel(ctx, todo, "COUNTING TOMATOES", prog, env.Scores)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	log.Printf("search %q: %d results", query, len(ms))
+	return ms, nil
 }

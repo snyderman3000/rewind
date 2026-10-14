@@ -27,18 +27,27 @@ INSTALL
 CONTROLS
   LIST     Up/Down move · Left/Right page · A details
            X add to Radarr · L1/R1 genre · L2/R2 streaming service
-           Y sort · START filters · SELECT refresh now · B exit
+           Y sort · START menu (filters, refresh) · SELECT search · B exit
+  SEARCH   arrows move · A type · B delete · X space · Y clear
+           START search · SELECT cancel
+  RESULTS  A details · X add to Radarr · SELECT new search · B back
   DETAILS  A trailer · X add to Radarr · Y recheck Radarr
            Up/Down scroll synopsis · L1/R1 previous/next · B back
   TRAILER  A pause/play · Left/Right still · L1/R1 previous/next
            X add to Radarr · B back
   MENU exits from anywhere.
 
-FILTERS (START)
+SEARCH (SELECT)
+  Type any movie's title, however old, on the on-screen keyboard. The
+  results show scores, details and services like the guide does, and X
+  records one to Radarr. Your last five searches are listed under the keys.
+
+MENU (START)
   Sort by Tomatometer, newest, popular, IMDb, Metascore, title or runtime.
   Filter by genre, service, minimum Tomatometer (60/75/90%), age rating
   (G, up to PG, up to PG-13, R only), runtime, and hide unscored movies.
-  Your choices are remembered.
+  Your choices are remembered. REFRESH GUIDE (press A) reloads the guide
+  now; it also refreshes by itself every few hours.
 
 SETTINGS  (App/Rewind/data/config.json)
   tmdb_api_key   TMDB v3 API key, or the longer v4 "API Read Access Token"
@@ -75,9 +84,11 @@ ABOUT THE TRAILERS
 
 ABOUT "NEW ON STREAMING"
   TMDB doesn't record the day a film was added to a service, so Rewind
-  uses films whose digital release was in the last "days" days and that a
-  subscription service carries now. Older films newly added to a service
-  won't appear.
+  takes films released digitally that a subscription service carries now:
+  the most popular from the last two weeks, from the last "days" days and
+  from the past year. When an older film shows up between refreshes it has
+  most likely just arrived on a service, so NEWEST puts it on top and its
+  details show an ARRIVED date.
 
 DATA
   Movie data and images: TMDB. This product uses the TMDB API but is not

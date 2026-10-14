@@ -28,10 +28,15 @@ func fakeAPIs(t *testing.T, omdbErr string) (*Env, *int32, *int32) {
 			fmt.Fprint(w, `{"status_code":7,"status_message":"Invalid API key: You must be granted a valid key."}`)
 			return
 		}
-		for k, v := range map[string]string{"with_release_type": "4", "watch_region": "US", "with_watch_monetization_types": "flatrate", "release_date.lte": "2026-10-01", "release_date.gte": "2026-06-03"} {
+		for k, v := range map[string]string{"with_release_type": "4", "watch_region": "US", "with_watch_monetization_types": "flatrate", "release_date.lte": "2026-10-01"} {
 			if q.Get(k) != v {
 				t.Errorf("discover %s = %q, want %q", k, q.Get(k), v)
 			}
+		}
+		switch q.Get("release_date.gte") {
+		case "2026-09-17", "2026-06-03", "2025-10-01": // last 14 days, the 120-day window, last year
+		default:
+			t.Errorf("discover release_date.gte = %q", q.Get("release_date.gte"))
 		}
 		if q.Get("page") == "1" {
 			fmt.Fprint(w, `{"page":1,"total_pages":2,"results":[

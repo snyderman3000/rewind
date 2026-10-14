@@ -8,7 +8,7 @@
 |---|---|
 | ![The shelf](docs/list.png) | ![Movie details](docs/detail.png) |
 | ![Trailer reel](docs/trailer.png) | ![Sort and filter](docs/filter.png) |
-| ![Add to Radarr](docs/radarr.png) | |
+| ![Add to Radarr](docs/radarr.png) | ![Search any movie](docs/search.png) |
 
 *Screenshots use invented movies, scores and artwork.*
 
@@ -17,6 +17,7 @@
 - **What's new on streaming.** Films whose digital release was in the last 120 days (configurable) and that Netflix, Prime Video, Disney+, Max, Hulu, Peacock, Paramount+, Apple TV+ or another subscription service carries in your region now.
 - **Scores.** Rotten Tomatoes Tomatometer (on an LED meter, of course), IMDb rating, Metascore and TMDB rating.
 - **The details.** Age rating, runtime, genres, director, writers, cast with roles, tagline, synopsis, digital release date and every service it's on.
+- **Search any movie.** Press **SELECT** and type a title on the on-screen keyboard to find any film, however old, with its scores, details and services. Press **X** on a result to record it to Radarr. Your last five searches are one press away.
 - **Sort** by Tomatometer, newest, popular, IMDb, Metascore, title or runtime.
 - **Filter** by genre, streaming service, minimum Tomatometer (60 / 75 / 90%), age rating (G, up to PG, up to PG-13, R only), runtime, and hide unscored films. Choices are remembered.
 - **Trailers.** The Miyoo can't play YouTube, so each film gets a VCR-style reel of its stills, with a QR code beside it that opens the real trailer on your phone.
@@ -40,7 +41,9 @@ Requires OnionOS 4.2 or newer and Wi-Fi (Miyoo Mini Plus or Mini Flip).
 
 | Screen | Buttons |
 |---|---|
-| Shelf | ↑↓ move · ←→ page · **A** details · **X** add to Radarr · **L1/R1** genre · **L2/R2** service · **Y** sort · **START** filters · **SELECT** refresh · **B** exit |
+| Shelf | ↑↓ move · ←→ page · **A** details · **X** add to Radarr · **L1/R1** genre · **L2/R2** service · **Y** sort · **START** menu (filters, refresh) · **SELECT** search · **B** exit |
+| Search keyboard | ↑↓←→ move · **A** type · **B** delete · **X** space · **Y** clear · **START** search · **SELECT** cancel |
+| Search results | ↑↓ move · **A** details · **X** add to Radarr · **SELECT** new search · **B** back to the guide |
 | Details | **A** trailer · **X** add to Radarr · **Y** recheck Radarr · ↑↓ scroll synopsis · **L1/R1** previous/next · **B** back |
 | Trailer | **A** pause/play · ←→ still · **L1/R1** previous/next · **X** add to Radarr · **B** back |
 
@@ -78,7 +81,9 @@ Logs are written to `App/Rewind/data/rewind.log`.
 
 ## How "new on streaming" works
 
-TMDB doesn't record the day a film was added to a service, so Rewind asks TMDB's discover endpoint for films with a **digital** release in your region during the last `days` days that a **subscription** (flat-rate) service carries now, then reads each film's details and keeps only the ones with a service listed. Older catalog films newly added to a service won't appear. Scores come from OMDb, looked up by IMDb id.
+TMDB doesn't record the day a film was added to a service, so Rewind asks TMDB's discover endpoint for films with a **digital** release in your region that a **subscription** (flat-rate) service carries now, then reads each film's details and keeps only the ones with a service listed. It fills the guide from three windows, so neither end gets crowded out: the most popular releases of the last two weeks, then of the last `days` days, then of the past year (which catches big films that reach Netflix or Max months after their rental release).
+
+Rewind remembers when each film first appeared in its guide. When an older film turns up between refreshes, it has most likely just arrived on a service, so the **NEWEST** sort puts it at the top and its details show an **ARRIVED** date. (It can't tell that apart from a film that has only now become popular enough to be listed.) Scores come from OMDb, looked up by IMDb id.
 
 ## How it works
 
@@ -87,7 +92,8 @@ TMDB doesn't record the day a film was added to a service, so Rewind asks TMDB's
 | `device.go` | Framebuffer output (rotated 180° for the Mini's panel) and button input, shared with Mixtape |
 | `gfx.go`, `gfx_vhs.go`, `gfx_deck.go` | Software renderer: fonts, VHS tape, deck panels, seven-segment digits, tomato badges, QR codes, VCR effects |
 | `ui.go`, `ui_draw.go` | Navigation, and drawing each screen |
-| `tmdb.go` | Discover, details, genres, trailer and still selection |
+| `ui_search.go` | On-screen keyboard and the search results shelf |
+| `tmdb.go` | Discover, search, details, genres, trailer and still selection |
 | `omdb.go` | Tomatometer, IMDb and Metascore |
 | `library.go` | Cached guide, background refresh, filtering and sorting |
 | `radarr.go`, `ui_radarr.go` | Radarr v3 API: library markers, download progress, adding movies |
@@ -101,7 +107,7 @@ Requires Go 1.24 or newer.
 
 ```sh
 ./build.sh               # runs the tests, then builds dist/Rewind-vX.Y.Z-OnionOS.zip
-go run . -shot detail    # renders a demo screen to shot.png (boot|list|filter|detail|trailer|setup|bye)
+go run . -shot detail    # renders a demo screen to shot.png (boot|list|filter|detail|trailer|keyboard|search|setup|bye)
 ```
 
 ## Credits and data

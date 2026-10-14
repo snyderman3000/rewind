@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const version = "0.3.0"
+const version = "0.4.0"
 const userAgent = "Rewind/" + version + " (OnionOS movie guide)"
 
 // Config lives in App/Rewind/data/config.json.
@@ -115,7 +115,7 @@ func loadConfig(path string) Config {
 }
 
 func main() {
-	shot := flag.String("shot", "", "render a scene to PNG instead of running on the device (boot|list|filter|detail|trailer|setup|bye)")
+	shot := flag.String("shot", "", "render a scene to PNG instead of running on the device (boot|list|filter|detail|trailer|keyboard|search|setup|bye)")
 	out := flag.String("out", "shot.png", "PNG path for -shot")
 	w := flag.Int("w", 640, "screen width for -shot")
 	h := flag.Int("h", 480, "screen height for -shot")

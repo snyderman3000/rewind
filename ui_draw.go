@@ -49,6 +49,8 @@ func (u *UI) Draw(c *Canvas) {
 		u.drawDetail(c)
 	case scrTrailer:
 		u.drawTrailer(c)
+	case scrKeyboard:
+		u.drawKeyboard(c)
 	}
 	c.Scanlines(0, u.topH(), c.W, u.contentBot()-u.topH(), 0.10)
 	switch u.modal {
@@ -252,31 +254,38 @@ func (u *UI) drawList(c *Canvas) {
 	// program line: genre, sort, filters · count or refresh progress
 	hy := u.topH() + u.px(10)
 	x := u.px(16)
-	x = c.Text(u.fSmall, x, hy-u.px(2), "◀ "+u.fSmall.Ellipsize(strings.ToUpper(orAll(u.filter.Genre, "ALL GENRES")), u.px(130))+" ▶", colVFD) + u.px(12)
-	x = c.Text(u.fTiny, x, hy, "SORT ", colVFDDim)
-	x = c.Text(u.fTiny, x, hy, sortNames[u.filter.Sort], colVFDMid) + u.px(12)
-	extra := u.filter.Active()
-	if u.filter.Genre != "" {
-		extra--
-	}
-	if extra > 0 {
-		c.Text(u.fTiny, x, hy, fmt.Sprintf("%d FILTER%s", extra, map[bool]string{true: "S", false: ""}[extra > 1]), colDeckAmb)
-	}
-	if u.refreshing {
-		c.TextRight(u.fTiny, c.W-u.px(14), hy, u.fTiny.Ellipsize(u.refreshLabel(), u.px(230)), colDeckAmb)
+	if u.search.on {
+		u.searchHeader(c, hy)
 	} else {
-		r := c.W - u.px(14)
-		c.TextRight(u.fTiny, r, hy, "TAPES", colVFDDim)
-		cnt := fmt.Sprintf("%03d", min(999, n))
-		dw, dh, t := u.px(8), u.px(14), max(1, u.px(2))
-		c.Seg7(r-u.fTiny.Width("TAPES ")-Seg7Width(dw, t, cnt), hy, dw, dh, t, cnt, colVFD, colGlass)
+		x = c.Text(u.fSmall, x, hy-u.px(2), "◀ "+u.fSmall.Ellipsize(strings.ToUpper(orAll(u.filter.Genre, "ALL GENRES")), u.px(130))+" ▶", colVFD) + u.px(12)
+		x = c.Text(u.fTiny, x, hy, "SORT ", colVFDDim)
+		x = c.Text(u.fTiny, x, hy, sortNames[u.filter.Sort], colVFDMid) + u.px(12)
+		extra := u.filter.Active()
+		if u.filter.Genre != "" {
+			extra--
+		}
+		if extra > 0 {
+			c.Text(u.fTiny, x, hy, fmt.Sprintf("%d FILTER%s", extra, map[bool]string{true: "S", false: ""}[extra > 1]), colDeckAmb)
+		}
+		if u.refreshing {
+			c.TextRight(u.fTiny, c.W-u.px(14), hy, u.fTiny.Ellipsize(u.refreshLabel(), u.px(230)), colDeckAmb)
+		} else {
+			r := c.W - u.px(14)
+			c.TextRight(u.fTiny, r, hy, "TAPES", colVFDDim)
+			cnt := fmt.Sprintf("%03d", min(999, n))
+			dw, dh, t := u.px(8), u.px(14), max(1, u.px(2))
+			c.Seg7(r-u.fTiny.Width("TAPES ")-Seg7Width(dw, t, cnt), hy, dw, dh, t, cnt, colVFD, colGlass)
+		}
 	}
 
 	if n == 0 {
 		cx := lw / 2
 		title, sub := "NOTHING MATCHES", "START TO LOOSEN THE FILTERS"
-		if len(u.lib.Movies) == 0 {
-			title, sub = "NO TAPE", "PRESS SELECT TO LOAD THE GUIDE"
+		if u.search.on {
+			title, sub = u.searchEmpty()
+			cx = c.W / 2
+		} else if len(u.lib.Movies) == 0 {
+			title, sub = "NO TAPE", "START, THEN REFRESH GUIDE, TO LOAD IT"
 			if u.refreshing {
 				sub = "LOADING THE GUIDE…"
 			}
@@ -329,7 +338,11 @@ func (u *UI) drawList(c *Canvas) {
 	}
 	items := [][2]string{{"A", "INFO"}}
 	items = append(items, u.radarrKey(nil, false)...)
-	items = append(items, [2]string{"Y", "SORT"}, [2]string{"ST", "MENU"}, [2]string{"SEL", "REFRESH"}, [2]string{"B", "⏏ EJECT"})
+	if u.search.on {
+		items = append(items, [2]string{"SEL", "NEW SEARCH"}, [2]string{"B", "GUIDE"})
+	} else {
+		items = append(items, [2]string{"Y", "SORT"}, [2]string{"ST", "MENU"}, [2]string{"SEL", "SEARCH"}, [2]string{"B", "⏏ EJECT"})
+	}
 	u.keys(c, items)
 }
 
@@ -381,6 +394,10 @@ func (u *UI) drawSidePanel(c *Canvas, m *Movie, x int) {
 	names := m.ProviderNames()
 	if len(names) == 0 && !m.HasDetails() {
 		names = []string{"…"}
+	}
+	if len(names) == 0 && u.search.on {
+		c.Text(u.fTiny, sx, sy, "NOT STREAMING", colVFDDim)
+		sy += u.fTiny.height + u.px(2)
 	}
 	for i, p := range names {
 		if i == 2 {
@@ -561,6 +578,9 @@ func (u *UI) drawDetail(c *Canvas) {
 	kv("STREAMING", strings.ToUpper(strings.Join(m.ProviderNames(), " · ")), colDeckAmb)
 	if !m.Released.IsZero() {
 		kv("DIGITAL", strings.ToUpper(m.Released.Format("Jan 2, 2006")), colVFD)
+	}
+	if m.Arrived() {
+		kv("ARRIVED", strings.ToUpper(m.OnSince.Format("Jan 2, 2006")), colVFD)
 	}
 	if st, col := u.radarrStatus(m); st != "" {
 		kv("RADARR", st, col)
@@ -785,7 +805,7 @@ func (u *UI) drawFilter(c *Canvas) {
 		c.Text(u.fSmall, x+u.px(32), ry, filterLabels[i], lc)
 		val := u.filterValue(i)
 		vc := colVFD
-		if i == fRowReset {
+		if i == fRowReset || i == fRowRefresh {
 			vc = colVFDDim
 			if sel {
 				vc = colDeckAmb

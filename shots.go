@@ -228,6 +228,38 @@ func demoScene(u *UI, scene string) {
 		u.stillStart = u.frame - 4
 		u.playFrames = 75
 		u.still = 1
+	case "keyboard", "search":
+		u.search.recent = []string{"night shift", "the thing", "back to the future"}
+		u.search.loaded = true
+		if scene == "keyboard" {
+			u.openKeyboard()
+			u.kb.text = "NIGHT SH"
+			u.kb.row, u.kb.col = 1, 7
+			return
+		}
+		olds := []struct {
+			title, cert string
+			year, rt    int
+			svc         string
+			hue         float64
+		}{{"Night Shift", "R", 1982, 63, "", 0.6}, {"Night Shift Diner", "PG-13", 1989, 78, "Tubi", 0.08},
+			{"The Night Shift Club", "R", 2004, 41, "", 0.3}, {"Night Shift: A Hospital Story", "TV-14", 2011, -1, "Netflix", 0.75}}
+		for i, o := range olds {
+			m := *u.lib.Movies[i]
+			m.ID, m.Title, m.Year, m.Cert, m.RT, m.Providers = 7000+i, o.title, o.year, o.cert, o.rt, nil
+			m.Released = time.Date(o.year, 3, 1, 0, 0, 0, 0, time.UTC)
+			m.Poster = "/night" + string(rune('a'+i)) + ".jpg"
+			if o.svc != "" {
+				m.Providers = []Provider{{ID: 1, Name: o.svc}}
+			}
+			w, h := u.listPosterBox()
+			u.imgs[u.imgKey(u.env.ImageURL("w185", m.Poster), w, h, true)] = demoArt(u, o.title, o.hue, w, h, -1)
+			u.search.results = append(u.search.results, &m)
+		}
+		u.rad.lib[7000] = RadarrMovie{ID: 7000, TMDBID: 7000, HasFile: true, Monitored: true}
+		u.search.on, u.search.query = true, "night shift"
+		u.refilter(0)
+		u.sel = 0
 	case "setup":
 		u.scr = scrSetup
 	case "bye":
