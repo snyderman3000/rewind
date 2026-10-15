@@ -55,8 +55,9 @@ SETTINGS  (App/Rewind/data/config.json)
   omdb_api_key   OMDb key (free tier: 1,000 lookups a day; Rewind caches scores)
   region         two-letter country for services and ratings (default US)
   language       titles and synopses (default en-US)
-  days           how recent a digital release must be (default 120)
-  max_movies     how many movies to keep in the guide (default 120)
+  days           how recent a release must be (default 120)
+  max_movies     how many movies to keep in the guide (default 250,
+                 up to 400; more means a longer first load)
   providers      limit to services by TMDB id, e.g. [8, 9, 337]
                  (8 Netflix, 9 Prime Video, 337 Disney+, 15 Hulu,
                   1899 Max, 531 Paramount+, 386 Peacock, 350 Apple TV+)
@@ -84,9 +85,11 @@ ABOUT THE TRAILERS
   watch the real trailer.
 
 ABOUT "NEW"
-  Rewind takes films released digitally that you can stream, rent or buy
-  now: the most popular from the last two weeks and the last "days" days,
-  plus streaming releases from the same window and the past year. TMDB
+  Rewind takes recent films you can stream, rent or buy now: digital
+  releases, films from US theaters and films that premiered in the last
+  "days" days, plus streaming releases from the past year. A theatrical
+  film shows up as soon as it can be rented, even before TMDB records its
+  digital release date (it then shows RELEASED instead of DIGITAL). TMDB
   doesn't record when a film reached a service, so when an older film
   shows up between refreshes, or a rental moves to a service, it has most
   likely just arrived, so NEWEST puts it on top and its

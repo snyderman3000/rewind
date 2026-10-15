@@ -4,7 +4,7 @@
   "region": "US",
   "language": "en-US",
   "days": 120,
-  "max_movies": 120,
+  "max_movies": 250,
   "providers": [],
   "refresh_hours": 6,
 

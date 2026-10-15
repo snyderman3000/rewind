@@ -593,7 +593,11 @@ func (u *UI) drawDetail(c *Canvas) {
 		kv("RENT / BUY", strings.ToUpper(strings.Join(m.StoreNames(), " · ")), colVFD)
 	}
 	if !m.Released.IsZero() {
-		kv("DIGITAL", strings.ToUpper(m.Released.Format("Jan 2, 2006")), colVFD)
+		label := "DIGITAL"
+		if m.Digital.IsZero() {
+			label = "RELEASED"
+		}
+		kv(label, strings.ToUpper(m.Released.Format("Jan 2, 2006")), colVFD)
 	}
 	if m.Arrived() {
 		kv("ARRIVED", strings.ToUpper(m.OnSince.Format("Jan 2, 2006")), colVFD)

@@ -299,9 +299,11 @@ func (env *Env) Refresh(ctx context.Context, old *Library, prog func(Progress)) 
 }
 
 // markArrivals sets OnSince on each movie. A movie the guide has carried before keeps its
-// date, unless it was only for rent and is now on a service: then it arrived today. A new one released digitally in the last two weeks gets its release date; an older
-// one has just reached a subscription service (or only now got popular enough to be listed,
-// which Rewind can't tell apart), so it gets today. The very first refresh, and the first
+// date, unless it was only for rent and is now on a service: then it arrived today. A new
+// rental gets its digital release date. Anything else new, released in the last two weeks,
+// gets its release date; an older one has just reached a service, or has just become
+// rentable before TMDB recorded a digital date, or only now got popular enough to be listed
+// (which Rewind can't tell apart), so it gets today. The very first refresh, and the first
 // after upgrading from 0.3, has nothing to compare with, so it uses release dates throughout.
 func (env *Env) markArrivals(old *Library, ms []*Movie, rentOnly map[int]bool) map[int]time.Time {
 	now := env.Now()
@@ -325,8 +327,13 @@ func (env *Env) markArrivals(old *Library, ms []*Movie, rentOnly map[int]bool) m
 			continue
 		}
 		t := m.Released
-		if !seeding && (t.IsZero() || now.Sub(t) > 14*24*time.Hour) {
-			t = today
+		if !seeding {
+			switch {
+			case !m.Digital.IsZero() && !m.Streaming():
+				t = m.Digital // a rental, available since its digital release
+			case t.IsZero() || now.Sub(t) > 14*24*time.Hour:
+				t = today // just reached a service, or rental with no digital date on TMDB yet
+			}
 		}
 		if t.IsZero() {
 			t = today

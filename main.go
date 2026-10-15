@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const version = "0.5.0"
+const version = "0.6.0"
 const userAgent = "Rewind/" + version + " (OnionOS movie guide)"
 
 // Config lives in App/Rewind/data/config.json.
@@ -41,7 +41,7 @@ type Config struct {
 }
 
 func defaultConfig() Config {
-	return Config{Region: "US", Language: "en-US", Days: 120, MaxMovies: 120, RefreshHours: 6, Providers: []int{}}
+	return Config{Region: "US", Language: "en-US", Days: 120, MaxMovies: 250, RefreshHours: 6, Providers: []int{}}
 }
 
 type Env struct {

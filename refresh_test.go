@@ -17,11 +17,21 @@ import (
 // had time to get popular and this week's haven't. 0.3 only ever kept the 120 most popular,
 // so the newest releases never made the guide and NEWEST stuck on an old film.
 type fakeFilm struct {
-	id      int
-	title   string
-	digital time.Time
-	pop     float64
-	service bool
+	id         int
+	title      string
+	digital    time.Time // zero: TMDB has no US digital date for it (yet)
+	theatrical time.Time // zero: never in US theaters
+	pop        float64
+	service    bool // on a subscription service; otherwise to rent or buy
+	notHome    bool // can't be watched at home at all yet
+}
+
+// first is a film's first release of any kind (TMDB's primary_release_date).
+func (f *fakeFilm) first() time.Time {
+	if f.theatrical.IsZero() || (!f.digital.IsZero() && f.digital.Before(f.theatrical)) {
+		return f.digital
+	}
+	return f.theatrical
 }
 
 func busyCatalog(t *testing.T, now *time.Time, films map[int]*fakeFilm) *Env {
@@ -31,12 +41,20 @@ func busyCatalog(t *testing.T, now *time.Time, films map[int]*fakeFilm) *Env {
 	})
 	mux.HandleFunc("/3/discover/movie", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		gte, _ := time.Parse("2006-01-02", q.Get("release_date.gte"))
-		lte, _ := time.Parse("2006-01-02", q.Get("release_date.lte"))
+		field, date := "release_date", func(f *fakeFilm) time.Time { return f.digital }
+		switch q.Get("with_release_type") {
+		case relTheatrical:
+			date = func(f *fakeFilm) time.Time { return f.theatrical }
+		case "":
+			field, date = "primary_release_date", (*fakeFilm).first
+		}
+		gte, _ := time.Parse("2006-01-02", q.Get(field+".gte"))
+		lte, _ := time.Parse("2006-01-02", q.Get(field+".lte"))
 		rent := q.Get("with_watch_monetization_types") != "flatrate"
 		var ms []*fakeFilm
 		for _, f := range films {
-			if (f.service || rent) && !f.digital.Before(gte) && !f.digital.After(lte) {
+			d := date(f)
+			if (f.service || rent) && !f.notHome && !d.IsZero() && !d.Before(gte) && !d.After(lte) {
 				ms = append(ms, f)
 			}
 		}
@@ -46,7 +64,7 @@ func busyCatalog(t *testing.T, now *time.Time, films map[int]*fakeFilm) *Env {
 		var res []string
 		for i := (page - 1) * 20; i < len(ms) && i < page*20; i++ {
 			f := ms[i]
-			res = append(res, fmt.Sprintf(`{"id":%d,"title":%q,"release_date":%q,"popularity":%v}`, f.id, f.title, f.digital.Format("2006-01-02"), f.pop))
+			res = append(res, fmt.Sprintf(`{"id":%d,"title":%q,"release_date":%q,"popularity":%v}`, f.id, f.title, f.first().Format("2006-01-02"), f.pop))
 		}
 		fmt.Fprintf(w, `{"page":%d,"total_pages":%d,"results":[%s]}`, page, pages, strings.Join(res, ","))
 	})
@@ -55,7 +73,7 @@ func busyCatalog(t *testing.T, now *time.Time, films map[int]*fakeFilm) *Env {
 		var res []string
 		for id := 1; id <= len(films)+10; id++ {
 			if f := films[id]; f != nil && strings.Contains(strings.ToLower(f.title), q) {
-				res = append(res, fmt.Sprintf(`{"id":%d,"title":%q,"release_date":%q,"popularity":%v}`, f.id, f.title, f.digital.Format("2006-01-02"), f.pop))
+				res = append(res, fmt.Sprintf(`{"id":%d,"title":%q,"release_date":%q,"popularity":%v}`, f.id, f.title, f.first().Format("2006-01-02"), f.pop))
 			}
 		}
 		fmt.Fprintf(w, `{"page":1,"total_pages":1,"results":[%s]}`, strings.Join(res, ","))
@@ -68,13 +86,22 @@ func busyCatalog(t *testing.T, now *time.Time, films map[int]*fakeFilm) *Env {
 			return
 		}
 		prov := `"rent":[{"provider_id":2,"provider_name":"Apple TV"}]`
-		if f.service {
+		switch {
+		case f.notHome:
+			prov = ""
+		case f.service:
 			prov = `"flatrate":[{"provider_id":99,"provider_name":"Shudder"}]`
 		}
-		d := f.digital.Format("2006-01-02T15:04:05.000Z")
-		fmt.Fprintf(w, `{"id":%d,"title":%q,"runtime":90,"genres":[{"id":27,"name":"Horror"}],
-			"release_dates":{"results":[{"iso_3166_1":"US","release_dates":[{"certification":"R","type":4,"release_date":%q}]}]},
-			"watch/providers":{"results":{"US":{%s}}}}`, f.id, f.title, d, prov)
+		var dates []string
+		if !f.digital.IsZero() {
+			dates = append(dates, fmt.Sprintf(`{"certification":"","type":4,"release_date":%q}`, f.digital.Format("2006-01-02T15:04:05.000Z")))
+		}
+		if !f.theatrical.IsZero() {
+			dates = append(dates, fmt.Sprintf(`{"certification":"R","type":3,"release_date":%q}`, f.theatrical.Format("2006-01-02T15:04:05.000Z")))
+		}
+		fmt.Fprintf(w, `{"id":%d,"title":%q,"runtime":90,"release_date":%q,"genres":[{"id":27,"name":"Horror"}],
+			"release_dates":{"results":[{"iso_3166_1":"US","release_dates":[%s]}]},
+			"watch/providers":{"results":{"US":{%s}}}}`, f.id, f.title, f.first().Format("2006-01-02"), strings.Join(dates, ","), prov)
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -289,4 +316,51 @@ func TestSearchFromTheShelf(t *testing.T) {
 		t.Error("REFRESH GUIDE in the menu")
 	}
 	pump(func() bool { return !u.refreshing })
+}
+
+// Practical Magic 2's situation: in theaters a month ago, rentable since yesterday, but
+// TMDB hasn't recorded a US digital date yet. 0.5 never listed films like that.
+func TestRentableBeforeTMDBHasADigitalDate(t *testing.T) {
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	films := map[int]*fakeFilm{}
+	for i := 1; i <= 400; i++ { // a busy year of established, more popular releases
+		age := 380 - i*9/10
+		films[i] = &fakeFilm{id: i, title: fmt.Sprintf("Film %d", i), digital: now.AddDate(0, 0, -age), pop: float64(age + 50), service: i%2 == 0}
+	}
+	films[901] = &fakeFilm{id: 901, title: "Seen Before", digital: now.AddDate(0, 0, -5), pop: 30}
+	env := busyCatalog(t, &now, films)
+	lib, _, err := env.Refresh(context.Background(), env.LoadLibrary(), func(Progress) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now = now.AddDate(0, 0, 1)
+	sep11 := time.Date(2026, 9, 11, 0, 0, 0, 0, time.UTC)
+	films[902] = &fakeFilm{id: 902, title: "Practical Magic 2", theatrical: sep11, pop: 45}
+	films[903] = &fakeFilm{id: 903, title: "Still In Theaters", theatrical: sep11, pop: 60, notHome: true}
+	films[904] = &fakeFilm{id: 904, title: "Festival Indie", digital: now.AddDate(0, 0, -1), pop: 1}
+	films[905] = &fakeFilm{id: 905, title: "August Rental", theatrical: now.AddDate(0, 0, -80), digital: now.AddDate(0, 0, -50), pop: 2}
+	lib, _, err = env.Refresh(context.Background(), lib, func(Progress) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pm := byID(lib, 902)
+	if pm == nil {
+		t.Fatal("a film rentable before TMDB has its digital date should be listed")
+	}
+	if !pm.Released.Equal(sep11) || !pm.Digital.IsZero() || !pm.Arrived() {
+		t.Errorf("Practical Magic 2: released %v digital %v arrived %v", pm.Released, pm.Digital, pm.Arrived())
+	}
+	if got := newestTitle(lib); got != "Practical Magic 2" {
+		t.Errorf("newest = %q, want Practical Magic 2", got)
+	}
+	if byID(lib, 903) != nil {
+		t.Error("a film that's only in theaters can't be watched at home")
+	}
+	if byID(lib, 904) == nil {
+		t.Error("this week's digital release missing")
+	}
+	if ar := byID(lib, 905); ar != nil && (ar.Arrived() || !ar.OnSince.Equal(ar.Digital)) {
+		t.Errorf("a rental found late keeps its digital date, not today: %+v", ar.OnSince)
+	}
 }
