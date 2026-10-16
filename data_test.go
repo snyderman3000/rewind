@@ -52,7 +52,7 @@ func fakeAPIs(t *testing.T, omdbErr string) (*Env, *int32, *int32) {
 		if q.Get("page") == "1" {
 			fmt.Fprint(w, `{"page":1,"total_pages":2,"results":[
 				{"id":101,"title":"Alpha","release_date":"2026-07-04","poster_path":"/a.jpg","genre_ids":[28,18],"popularity":50,"vote_average":7.1,"vote_count":200},
-				{"id":102,"title":"Beta","release_date":"2026-05-01","poster_path":"/b.jpg","genre_ids":[10751],"popularity":80}]}`)
+				{"id":102,"title":"Beta","release_date":"2026-08-01","poster_path":"/b.jpg","genre_ids":[10751],"popularity":80}]}`)
 			return
 		}
 		fmt.Fprint(w, `{"page":2,"total_pages":2,"results":[
@@ -91,10 +91,11 @@ func fakeAPIs(t *testing.T, omdbErr string) (*Env, *int32, *int32) {
 		case "102":
 			fmt.Fprint(w, `{"id":102,"title":"Beta","runtime":95,"imdb_id":"tt102","release_date":"2026-03-01",
 			"genres":[{"id":10751,"name":"Family"}],
-			"release_dates":{"results":[{"iso_3166_1":"US","release_dates":[{"certification":"PG","type":3,"release_date":"2026-03-01T00:00:00.000Z"},{"type":4,"release_date":"2026-05-01T00:00:00.000Z"}]}]},
+			"release_dates":{"results":[{"iso_3166_1":"US","release_dates":[{"certification":"PG","type":3,"release_date":"2026-03-01T00:00:00.000Z"},{"type":4,"release_date":"2026-08-01T00:00:00.000Z"}]}]},
 			"watch/providers":{"results":{"US":{"flatrate":[{"provider_id":337,"provider_name":"Disney Plus","display_priority":1}]}}}}`)
 		case "103":
-			fmt.Fprint(w, `{"id":103,"title":"Gamma","imdb_id":"tt103","watch/providers":{"results":{"US":{"rent":[{"provider_id":2,"provider_name":"Apple TV"}]}}}}`)
+			fmt.Fprint(w, `{"id":103,"title":"Gamma","imdb_id":"tt103","release_date":"2026-08-01",
+			"release_dates":{"results":[{"iso_3166_1":"US","release_dates":[{"type":4,"release_date":"2026-08-01T00:00:00.000Z"}]}]},"watch/providers":{"results":{"US":{"rent":[{"provider_id":2,"provider_name":"Apple TV"}]}}}}`)
 		case "104":
 			fmt.Fprint(w, `{"id":104,"title":"Delta","imdb_id":"tt104","watch/providers":{"results":{}}}`)
 		default:

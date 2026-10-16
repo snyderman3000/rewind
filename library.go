@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -34,55 +35,54 @@ type Video struct {
 func (v *Video) URL() string { return "https://youtu.be/" + v.Key }
 
 type Movie struct {
-	ID         int          `json:"id"`
-	Title      string       `json:"title"`
-	Year       int          `json:"year"`
-	Released   time.Time    `json:"released"` // digital release in the region when known
-	Digital    time.Time    `json:"digital"`
-	Tagline    string       `json:"tagline,omitempty"`
-	Overview   string       `json:"overview"`
-	Poster     string       `json:"poster"`
-	Backdrop   string       `json:"backdrop"`
-	Stills     []string     `json:"stills,omitempty"`
-	GenreIDs   []int        `json:"genre_ids"`
-	Genres     []string     `json:"genres,omitempty"`
-	Popularity float64      `json:"popularity"`
-	VoteAvg    float64      `json:"vote_avg"`
-	VoteCount  int          `json:"vote_count"`
-	Runtime    int          `json:"runtime"`
-	Cert       string       `json:"cert"`
-	IMDbID     string       `json:"imdb_id"`
-	Directors  []string     `json:"directors,omitempty"`
-	Writers    []string     `json:"writers,omitempty"`
-	Cast       []CastMember `json:"cast,omitempty"`
-	Trailer    *Video       `json:"trailer,omitempty"`
-	Providers  []Provider   `json:"providers,omitempty"` // subscription, free and ad-supported services
-	Stores     []Provider   `json:"stores,omitempty"`    // where it can be rented or bought
-	WatchLink  string       `json:"watch_link,omitempty"`
-	RT         int          `json:"rt"`   // Tomatometer 0-100, -1 unknown
-	Meta       int          `json:"meta"` // Metascore 0-100, -1 unknown
-	IMDb       float64      `json:"imdb"` // 0 unknown
-	IMDbVotes  string       `json:"imdb_votes,omitempty"`
-	Awards     string       `json:"awards,omitempty"`
-	OnSince    time.Time    `json:"on_since,omitempty"` // when Rewind first saw it on a subscription service
-	DetailAt   time.Time    `json:"detail_at"`
-	ScoresAt   time.Time    `json:"scores_at"`
+	ID          int          `json:"id"`
+	Title       string       `json:"title"`
+	Year        int          `json:"year"`
+	Released    time.Time    `json:"released"`               // for display: digital release, else theatrical, else premiere
+	Digital     time.Time    `json:"digital"`                // first digital release in the region that has happened
+	DigitalSoon time.Time    `json:"digital_soon,omitempty"` // scheduled digital release, when none has happened
+	Theatrical  time.Time    `json:"theatrical,omitempty"`   // first theatrical release in the region
+	Premiere    time.Time    `json:"premiere,omitempty"`     // first release anywhere, of any kind
+	HomeAt      time.Time    `json:"home_at,omitempty"`      // when it could first be watched at home (see homeDate)
+	Rent        bool         `json:"rent,omitempty"`         // a store rents it (not only sells it)
+	Tagline     string       `json:"tagline,omitempty"`
+	Overview    string       `json:"overview"`
+	Poster      string       `json:"poster"`
+	Backdrop    string       `json:"backdrop"`
+	Stills      []string     `json:"stills,omitempty"`
+	GenreIDs    []int        `json:"genre_ids"`
+	Genres      []string     `json:"genres,omitempty"`
+	Popularity  float64      `json:"popularity"`
+	VoteAvg     float64      `json:"vote_avg"`
+	VoteCount   int          `json:"vote_count"`
+	Runtime     int          `json:"runtime"`
+	Cert        string       `json:"cert"`
+	IMDbID      string       `json:"imdb_id"`
+	Directors   []string     `json:"directors,omitempty"`
+	Writers     []string     `json:"writers,omitempty"`
+	Cast        []CastMember `json:"cast,omitempty"`
+	Trailer     *Video       `json:"trailer,omitempty"`
+	Providers   []Provider   `json:"providers,omitempty"` // subscription, free and ad-supported services
+	Stores      []Provider   `json:"stores,omitempty"`    // where it can be rented or bought
+	WatchLink   string       `json:"watch_link,omitempty"`
+	RT          int          `json:"rt"`   // Tomatometer 0-100, -1 unknown
+	Meta        int          `json:"meta"` // Metascore 0-100, -1 unknown
+	IMDb        float64      `json:"imdb"` // 0 unknown
+	IMDbVotes   string       `json:"imdb_votes,omitempty"`
+	Awards      string       `json:"awards,omitempty"`
+	DetailAt    time.Time    `json:"detail_at"`
+	DetailV     int          `json:"detail_v,omitempty"`
+	ScoresAt    time.Time    `json:"scores_at"`
 }
 
 func (m *Movie) HasDetails() bool { return !m.DetailAt.IsZero() }
 
-// NewDate is what the NEWEST sort uses: the day the movie turned up on a service when
-// Rewind saw that happen, otherwise its digital release.
+// NewDate is what the NEWEST sort uses: when the movie could first be watched at home.
 func (m *Movie) NewDate() time.Time {
-	if m.OnSince.After(m.Released) {
-		return m.OnSince
+	if !m.HomeAt.IsZero() {
+		return m.HomeAt
 	}
 	return m.Released
-}
-
-// Arrived reports whether the movie reached a service well after its digital release.
-func (m *Movie) Arrived() bool {
-	return !m.OnSince.IsZero() && m.OnSince.Sub(m.Released) > 3*24*time.Hour
 }
 
 // Streaming: on a subscription (or free) service, rather than only to rent or buy.
@@ -110,10 +110,14 @@ type Library struct {
 	Updated time.Time      `json:"updated"`
 	Region  string         `json:"region"`
 	Days    int            `json:"days"`
-	// Known: every movie the guide has carried, with the day it first appeared, so a film that
-	// drops out of the guide and comes back isn't mistaken for a new arrival.
-	Known  map[int]time.Time `json:"known,omitempty"`
-	Source string            `json:"-"` // "live", "cache", "empty"
+	// HomeSeen: when each film with no digital date on TMDB was first seen available at home,
+	// which stands in for its digital release date until TMDB has one.
+	HomeSeen map[int]time.Time `json:"home_seen,omitempty"`
+	// Skip: candidates found not to be recent home releases (re-releases of older films),
+	// with when, so their details aren't fetched again every refresh.
+	Skip    map[int]time.Time `json:"skip,omitempty"`
+	Version int               `json:"v,omitempty"`
+	Source  string            `json:"-"` // "live", "cache", "empty"
 }
 
 func (env *Env) libraryPath() string { return filepath.Join(env.DataDir, "library.json") }
@@ -150,7 +154,7 @@ func (env *Env) SaveLibrary(lib *Library) error {
 
 // NeedsRefresh: the cache is old, empty, or was made for other settings.
 func (env *Env) NeedsRefresh(lib *Library) bool {
-	return len(lib.Movies) == 0 || lib.Region != env.Config.Region || lib.Days != env.Config.Days ||
+	return len(lib.Movies) == 0 || lib.Version < libVersion || lib.Region != env.Config.Region || lib.Days != env.Config.Days ||
 		env.Now().Sub(lib.Updated) > time.Duration(env.Config.RefreshHours)*time.Hour
 }
 
@@ -186,9 +190,15 @@ type Progress struct {
 	Total int
 }
 
+// detailVersion goes up when Details reads something new, so cached details are re-read.
+const detailVersion = 2
+
+// libVersion goes up when the guide is chosen differently, so the next launch refreshes.
+const libVersion = 7
+
 // detailStale: details (cast, services, trailer) are re-read every few days, since services change.
 func (env *Env) detailStale(m *Movie) bool {
-	return !m.HasDetails() || env.Now().Sub(m.DetailAt) > 3*24*time.Hour
+	return !m.HasDetails() || m.DetailV < detailVersion || env.Now().Sub(m.DetailAt) > 3*24*time.Hour
 }
 
 // scoresStale: new releases' scores move fast at first, then settle.
@@ -219,8 +229,17 @@ func (env *Env) Refresh(ctx context.Context, old *Library, prog func(Progress)) 
 		}
 		genres = g
 	}
+	now := env.Now()
+	skip := map[int]time.Time{}
+	if old.Version == libVersion && old.Region == env.Config.Region {
+		for id, t := range old.Skip {
+			if now.Sub(t) < 7*24*time.Hour {
+				skip[id] = t
+			}
+		}
+	}
 	prog(Progress{Phase: "FINDING NEW RELEASES"})
-	found, err := env.Discover(ctx)
+	found, err := env.Discover(ctx, skip)
 	if err != nil {
 		return nil, "", err
 	}
@@ -230,6 +249,9 @@ func (env *Env) Refresh(ctx context.Context, old *Library, prog func(Progress)) 
 	}
 	movies := make([]*Movie, 0, len(found))
 	for _, f := range found {
+		if _, ok := skip[f.ID]; ok {
+			continue
+		}
 		if p := prev[f.ID]; p != nil {
 			// keep cached details, take the fresh popularity
 			p.Popularity = f.Popularity
@@ -239,14 +261,6 @@ func (env *Env) Refresh(ctx context.Context, old *Library, prog func(Progress)) 
 			movies = append(movies, p)
 		} else {
 			movies = append(movies, f)
-		}
-	}
-
-	// which movies were only for rent last time, to notice them reaching a service
-	rentOnly := map[int]bool{}
-	for _, m := range old.Movies {
-		if m.HasDetails() && !m.Streaming() {
-			rentOnly[m.ID] = true
 		}
 	}
 
@@ -262,16 +276,42 @@ func (env *Env) Refresh(ctx context.Context, old *Library, prog func(Progress)) 
 		return nil, "", firstErr
 	}
 
-	// keep only movies that really can be watched somewhere (TMDB's discover can lag)
-	kept := make([]*Movie, 0, len(movies))
+	// keep the films whose first home release is recent, in the order found, up to MaxMovies
+	seen := map[int]time.Time{}
+	if old.Version == libVersion && old.Region == env.Config.Region {
+		for id, t := range old.HomeSeen {
+			if now.Sub(t) < time.Duration(env.Config.Days+30)*24*time.Hour {
+				seen[id] = t
+			}
+		}
+	}
+	seeding := old.Version != libVersion || len(old.Movies) == 0
+	kept := make([]*Movie, 0, env.Config.MaxMovies)
+	why := map[string]int{}
 	for _, m := range movies {
-		if m.HasDetails() && len(m.Providers) == 0 && len(m.Stores) == 0 && len(env.Config.Providers) == 0 {
+		if len(kept) >= env.Config.MaxMovies {
+			why["over max_movies"]++
 			continue
+		}
+		at, reason, final := env.homeDate(m, seen, seeding)
+		if reason != "" {
+			why[reason]++
+			if final {
+				skip[m.ID] = now
+			}
+			continue
+		}
+		m.HomeAt = at
+		if m.Digital.IsZero() && m.HasDetails() {
+			if _, ok := seen[m.ID]; !ok {
+				seen[m.ID] = at
+			}
 		}
 		kept = append(kept, m)
 	}
-
-	known := env.markArrivals(old, kept, rentOnly)
+	if len(why) > 0 {
+		log.Printf("refresh: left out %v", why)
+	}
 
 	// scores
 	todo = todo[:0]
@@ -286,7 +326,8 @@ func (env *Env) Refresh(ctx context.Context, old *Library, prog func(Progress)) 
 	if ctx.Err() != nil {
 		return nil, "", ctx.Err()
 	}
-	lib = &Library{Movies: kept, Genres: genres, Updated: env.Now(), Region: env.Config.Region, Days: env.Config.Days, Known: known, Source: "live"}
+	lib = &Library{Movies: kept, Genres: genres, Updated: env.Now(), Region: env.Config.Region, Days: env.Config.Days,
+		HomeSeen: seen, Skip: skip, Version: libVersion, Source: "live"}
 	lib.fillGenres()
 	logNewest(found, kept)
 	if err := env.SaveLibrary(lib); err != nil {
@@ -298,62 +339,63 @@ func (env *Env) Refresh(ctx context.Context, old *Library, prog func(Progress)) 
 	return lib, warn, nil
 }
 
-// markArrivals sets OnSince on each movie. A movie the guide has carried before keeps its
-// date, unless it was only for rent and is now on a service: then it arrived today. A new
-// rental gets its digital release date. Anything else new, released in the last two weeks,
-// gets its release date; an older one has just reached a service, or has just become
-// rentable before TMDB recorded a digital date, or only now got popular enough to be listed
-// (which Rewind can't tell apart), so it gets today. The very first refresh, and the first
-// after upgrading from 0.3, has nothing to compare with, so it uses release dates throughout.
-func (env *Env) markArrivals(old *Library, ms []*Movie, rentOnly map[int]bool) map[int]time.Time {
+// homeDate decides whether m is a recent home release, and when it became one: its first US
+// digital release when TMDB has one, otherwise (TMDB's digital dates lag) the day Rewind first
+// saw it available at home. reason says why a film was left out; final means it never will
+// qualify (it's an older film), so its details needn't be fetched again soon.
+func (env *Env) homeDate(m *Movie, seen map[int]time.Time, seeding bool) (at time.Time, reason string, final bool) {
 	now := env.Now()
-	known := map[int]time.Time{}
-	if old.Region == env.Config.Region {
-		for id, t := range old.Known {
-			if now.Sub(t) < 400*24*time.Hour {
-				known[id] = t
-			}
-		}
-	}
-	seeding := len(known) == 0
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	for _, m := range ms {
-		if t, ok := known[m.ID]; ok {
-			if rentOnly[m.ID] && m.Streaming() && m.HasDetails() {
-				t = today
-				known[m.ID] = t
-			}
-			m.OnSince = t
-			continue
-		}
-		t := m.Released
-		if !seeding {
-			switch {
-			case !m.Digital.IsZero() && !m.Streaming():
-				t = m.Digital // a rental, available since its digital release
-			case t.IsZero() || now.Sub(t) > 14*24*time.Hour:
-				t = today // just reached a service, or rental with no digital date on TMDB yet
-			}
-		}
-		if t.IsZero() {
-			t = today
-		}
-		m.OnSince = t
-		known[m.ID] = t
+	window := time.Duration(env.Config.Days) * 24 * time.Hour
+	if !m.HasDetails() {
+		return m.Released, "", false // couldn't read details: trust discover for now
 	}
-	return known
+	if !m.Premiere.IsZero() && now.Sub(m.Premiere) > maxAge {
+		return at, "first released over 2 years ago", true
+	}
+	if len(m.Providers) == 0 && len(m.Stores) == 0 && len(env.Config.Providers) == 0 {
+		return at, "not available at home yet", false
+	}
+	if !m.Digital.IsZero() {
+		if now.Sub(m.Digital) > window {
+			return at, "digital release older than the window", true
+		}
+		return m.Digital, "", false
+	}
+	if len(m.Providers) == 0 && !m.DigitalSoon.IsZero() {
+		return at, "digital release still to come (pre-order)", false
+	}
+	if len(m.Providers) == 0 && !m.Rent {
+		return at, "for sale only, with no digital date (likely a pre-order)", false
+	}
+	base := m.Theatrical
+	if base.IsZero() {
+		base = m.Premiere
+	}
+	if base.IsZero() || now.Sub(base) > window {
+		return at, "no recent release", true
+	}
+	t, ok := seen[m.ID]
+	switch {
+	case ok:
+	case seeding && today.Sub(base) > 60*24*time.Hour:
+		// first refresh after installing: a film in theaters months ago has probably been at
+		// home for a while, so don't put it at the top as if it arrived today
+		t = base
+	default:
+		t = today
+	}
+	if t.Before(base) {
+		t = base
+	}
+	return t, "", false
 }
 
 // logNewest notes what a refresh found, so rewind.log shows whether the guide moved on.
 func logNewest(found, kept []*Movie) {
-	var newest *Movie
-	for _, m := range kept {
-		if newest == nil || m.NewDate().After(newest.NewDate()) {
-			newest = m
-		}
-	}
-	if newest == nil {
-		log.Printf("refresh: %d found, none available to watch", len(found))
+	v := Filter{Sort: SortNewest}.Apply(kept, nil)
+	if len(v) == 0 {
+		log.Printf("refresh: %d candidates, none qualify", len(found))
 		return
 	}
 	stream := 0
@@ -362,7 +404,14 @@ func logNewest(found, kept []*Movie) {
 			stream++
 		}
 	}
-	log.Printf("refresh: %d found, %d kept (%d streaming, %d rent/buy), newest %q (%s)", len(found), len(kept), stream, len(kept)-stream, newest.Title, newest.NewDate().Format("2006-01-02"))
+	var top []string
+	for i, m := range v {
+		if i == 5 {
+			break
+		}
+		top = append(top, fmt.Sprintf("%q %s", m.Title, m.NewDate().Format("01-02")))
+	}
+	log.Printf("refresh: %d candidates, %d kept (%d streaming, %d rent/buy); newest %s", len(found), len(kept), stream, len(kept)-stream, strings.Join(top, ", "))
 }
 
 func countDetails(ms []*Movie) int {

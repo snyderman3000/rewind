@@ -182,38 +182,41 @@ type discoverPass struct {
 	relType string // TMDB release type to date by; "" = the film's first release of any kind
 }
 
-// discoverPasses fills the guide from several angles, most urgent first, so no group crowds
-// out another. TMDB's US "digital" release date is entered by volunteers and often turns up
-// days after a film reaches rental, so Rewind doesn't rely on it alone: recent theatrical
-// releases, and anything that premiered recently, are listed as soon as JustWatch has
-// somewhere to stream, rent or buy them.
+// discoverPasses fills the list of candidates from several angles, most urgent first, so no
+// group crowds out another. TMDB's US "digital" release date is entered by volunteers and often
+// turns up days after a film reaches rental, so Rewind doesn't rely on it alone: recent
+// theatrical releases, and anything that premiered recently, are candidates as soon as JustWatch
+// has somewhere to stream, rent or buy them.
+//
+// TMDB matches a release of the asked-for type on any date in the window, including 4K
+// re-releases and anniversary showings of old films, so these are only candidates: Refresh
+// reads each one's details and keeps the films whose first US home release is recent.
 func (env *Env) discoverPasses() []discoverPass {
 	cfg := env.Config
-	n, d := cfg.MaxMovies, cfg.Days
+	n, d := cfg.MaxMovies*3/2, cfg.Days // more candidates than slots: some won't qualify
 	recent := min(14, d)
 	ps := []discoverPass{
-		{"DIGITAL, LAST 14 DAYS", recent, max(1, n/5), anyWay, relDigital},
-		{fmt.Sprintf("IN THEATERS, LAST %d DAYS, NOW AT HOME", d), d, max(1, n*2/5), anyWay, relTheatrical},
-		{fmt.Sprintf("PREMIERED, LAST %d DAYS, NOW AT HOME", d), d, max(1, n/2), anyWay, ""},
+		{"DIGITAL, LAST 14 DAYS", recent, max(1, n/4), anyWay, relDigital},
+		{fmt.Sprintf("IN THEATERS, LAST %d DAYS", d), d, max(1, n/2), anyWay, relTheatrical},
+		{fmt.Sprintf("PREMIERED, LAST %d DAYS", d), d, max(1, n*3/5), anyWay, ""},
+		{fmt.Sprintf("DIGITAL, LAST %d DAYS", d), d, max(1, n*17/20), anyWay, relDigital},
+		// rentals outnumber streaming releases, so streaming gets slots of its own
+		{fmt.Sprintf("STREAMING, LAST %d DAYS", d), d, n, streamOnly, relDigital},
 	}
-	if d > recent {
-		ps = append(ps, discoverPass{fmt.Sprintf("DIGITAL, LAST %d DAYS", d), d, max(1, n*7/10), anyWay, relDigital})
-	}
-	// rentals outnumber streaming releases, so streaming gets slots of its own
-	ps = append(ps, discoverPass{fmt.Sprintf("STREAMING, LAST %d DAYS", d), d, max(1, n*17/20), streamOnly, relDigital})
-	if d < 365 {
-		ps = append(ps, discoverPass{"STREAMING, LAST YEAR", 365, n, streamOnly, relDigital})
-	}
-	ps[len(ps)-1].upTo = n
 	return ps
 }
 
-// Discover returns up to MaxMovies basic entries.
-func (env *Env) Discover(ctx context.Context) ([]*Movie, error) {
+// maxAge: a film first released longer ago than this isn't new, whatever re-release dates
+// TMDB lists for it.
+const maxAge = 2 * 365 * 24 * time.Hour
+
+// Discover returns candidate entries for the guide.
+// Films in skip were found earlier not to qualify; they don't take up candidate slots.
+func (env *Env) Discover(ctx context.Context, skip map[int]time.Time) ([]*Movie, error) {
 	var out []*Movie
 	seen := map[int]bool{}
 	for _, pass := range env.discoverPasses() {
-		before := len(out)
+		before, old := len(out), 0
 		for page := 1; page <= 10 && len(out) < pass.upTo; page++ {
 			var dp discoverPage
 			if err := env.tmdbGet(ctx, "/discover/movie", env.discoverQuery(page, pass), &dp); err != nil {
@@ -228,6 +231,14 @@ func (env *Env) Discover(ctx context.Context) ([]*Movie, error) {
 					continue
 				}
 				seen[r.ID] = true
+				if _, ok := skip[r.ID]; ok {
+					old++
+					continue
+				}
+				if t, err := time.Parse("2006-01-02", r.Release); err == nil && (env.Now().Sub(t) > maxAge || t.After(env.Now())) {
+					old++ // an old film's re-release, or not out yet
+					continue
+				}
 				out = append(out, movieFromResult(r))
 				if len(out) >= pass.upTo {
 					break
@@ -237,7 +248,7 @@ func (env *Env) Discover(ctx context.Context) ([]*Movie, error) {
 				break
 			}
 		}
-		log.Printf("discover %s: +%d", pass.name, len(out)-before)
+		log.Printf("discover %s: +%d (%d skipped as old or unreleased)", pass.name, len(out)-before, old)
 	}
 	return out, nil
 }
@@ -400,12 +411,13 @@ func (env *Env) Details(ctx context.Context, m *Movie) error {
 	if err := env.tmdbGet(ctx, "/movie/"+strconv.Itoa(m.ID), q, &d); err != nil {
 		return err
 	}
-	applyDetails(m, &d, env.Config.Region)
+	applyDetails(m, &d, env.Config.Region, env.Now())
 	m.DetailAt = env.Now()
+	m.DetailV = detailVersion
 	return nil
 }
 
-func applyDetails(m *Movie, d *tmdbDetails, region string) {
+func applyDetails(m *Movie, d *tmdbDetails, region string, now time.Time) {
 	if d.Title != "" {
 		m.Title = d.Title
 	}
@@ -458,17 +470,23 @@ func applyDetails(m *Movie, d *tmdbDetails, region string) {
 			}
 		}
 	}
-	var theatrical time.Time
-	m.Cert, m.Digital, theatrical = regionalRelease(d, region)
+	m.Cert, m.Digital, m.DigitalSoon, m.Theatrical = regionalRelease(d, region, now)
+	m.Premiere = time.Time{}
+	if t, err := time.Parse("2006-01-02", d.Release); err == nil {
+		m.Premiere = t
+	}
 	switch {
 	case !m.Digital.IsZero():
 		m.Released = m.Digital
-	case !theatrical.IsZero():
-		m.Released = theatrical // TMDB has no digital date yet
+	case !m.Theatrical.IsZero():
+		m.Released = m.Theatrical // TMDB has no digital date yet
+	case !m.Premiere.IsZero():
+		m.Released = m.Premiere
 	}
 	m.Trailer = pickTrailer(d.Videos.Results)
 	m.Providers = m.Providers[:0]
 	m.Stores = m.Stores[:0]
+	m.Rent = false
 	m.WatchLink = ""
 	if r, ok := d.Providers.Results[region]; ok {
 		m.WatchLink = r.Link
@@ -483,6 +501,7 @@ func applyDetails(m *Movie, d *tmdbDetails, region string) {
 				}
 			}
 		}
+		m.Rent = len(r.Rent) > 0
 		for _, list := range [][]tmdbProvider{r.Rent, r.Buy} {
 			sort.SliceStable(list, func(i, j int) bool { return list[i].Priority < list[j].Priority })
 			for _, p := range list {
@@ -517,8 +536,11 @@ func applyDetails(m *Movie, d *tmdbDetails, region string) {
 	}
 }
 
-// regionalRelease picks the age rating and the digital and theatrical release dates for the region.
-func regionalRelease(d *tmdbDetails, region string) (cert string, digital, theatrical time.Time) {
+// regionalRelease picks the age rating and the US (or region's) release dates: the first
+// digital release that has happened, the first one still to come when none has (a scheduled
+// release, often with pre-orders open), and the first theatrical release that has happened.
+// Only the earliest dates count; later entries are re-releases.
+func regionalRelease(d *tmdbDetails, region string, now time.Time) (cert string, digital, soon, theatrical time.Time) {
 	for _, r := range d.ReleaseDates.Results {
 		if r.Country != region {
 			continue
@@ -534,6 +556,11 @@ func regionalRelease(d *tmdbDetails, region string) (cert string, digital, theat
 				}
 			}
 		}
+		earliest := func(cur *time.Time, t time.Time) {
+			if cur.IsZero() || t.Before(*cur) {
+				*cur = t
+			}
+		}
 		for _, x := range r.Dates {
 			t, err := time.Parse(time.RFC3339, x.Date)
 			if err != nil {
@@ -542,19 +569,21 @@ func regionalRelease(d *tmdbDetails, region string) (cert string, digital, theat
 			if err != nil {
 				continue
 			}
-			switch x.Type {
-			case 4:
-				if digital.IsZero() || t.Before(digital) {
-					digital = t
-				}
-			case 2, 3:
-				if theatrical.IsZero() || t.Before(theatrical) {
-					theatrical = t
-				}
+			future := t.After(now)
+			switch {
+			case x.Type == 4 && future:
+				earliest(&soon, t)
+			case x.Type == 4:
+				earliest(&digital, t)
+			case (x.Type == 2 || x.Type == 3) && !future:
+				earliest(&theatrical, t)
 			}
 		}
 	}
-	return cert, digital, theatrical
+	if !digital.IsZero() {
+		soon = time.Time{}
+	}
+	return cert, digital, soon, theatrical
 }
 
 // pickTrailer prefers an official YouTube trailer in English, newest first.

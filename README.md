@@ -81,20 +81,18 @@ Logs are written to `App/Rewind/data/rewind.log`.
 
 ## How "new" works
 
-Rewind lists recent films you can watch at home in your region now: on a subscription, free or ad-supported service, or to rent or buy. "Where to watch" comes from JustWatch via TMDB, and Rewind reads each film's details and keeps the ones with somewhere to watch them.
+Rewind lists films whose **first US home release** was in the last `days` days (120 by default) and that you can watch at home now: on a subscription, free or ad-supported service, or to rent. "Where to watch" comes from JustWatch via TMDB.
 
-TMDB's US **digital** release date is entered by volunteers and often turns up days after a film reaches rental, so Rewind doesn't depend on it. It asks TMDB's discover endpoint in passes, most popular first, so no group crowds out another:
+**NEWEST** sorts by the day a film first came home:
 
-1. digital releases of the last two weeks;
-2. films in US theaters in the last `days` days that can now be watched at home (this is how a theatrical film shows up the day it hits rental, before TMDB has its digital date);
-3. films that premiered anywhere in the last `days` days that can be watched at home;
-4. digital releases of the last `days` days;
-5. streaming releases of the last `days` days (rentals outnumber them);
-6. streaming releases of the past year (big films that reach Netflix or Max months after rental).
+- its **first** US digital release on TMDB. Later digital entries (4K editions, re-releases) and theatrical re-releases don't count, and dates that haven't happened yet are ignored, so a film whose digital release is still to come isn't listed, even when pre-orders are open;
+- or, when TMDB has no digital date yet (volunteers enter it, often days late), the day Rewind first saw the film available to rent or stream. Its details show **IN THEATERS** and **AT HOME BY** dates. Films that are only for sale are left out until TMDB has a date, because that's usually a pre-order.
 
-A film with no digital date yet shows its theatrical date as **RELEASED** instead of **DIGITAL**.
+Films first released more than two years ago are never listed, whatever re-release dates TMDB has. Older films that only now reach Netflix or Max aren't listed either: use **SELECT** to search for those.
 
-TMDB doesn't record the day a film was added to a service, so Rewind remembers when each film first appeared in its guide. When an older film turns up between refreshes, or a rental moves to a subscription service, it has most likely just arrived on a service, so the **NEWEST** sort puts it at the top and its details show an **ARRIVED** date. (It can't tell that apart from a film that has only now become popular enough to be listed.) Scores come from OMDb, looked up by IMDb id.
+Rewind finds candidates in passes, most popular first, so no group crowds out another: digital releases of the last two weeks, films in US theaters in the window, films that premiered anywhere in the window, digital releases of the window, and streaming releases of the window. It reads each candidate's details and keeps those that qualify; ones that never will (older films) aren't re-read for a week. `rewind.log` lists how many were left out and why, and the newest five each refresh.
+
+Scores come from OMDb, looked up by IMDb id.
 
 ## How it works
 

@@ -210,6 +210,12 @@ func demoScene(u *UI, scene string) {
 		pick("Neon Harbor")
 	case "rental":
 		pick("Midnight Freight")
+	case "detail-undated":
+		m := pick("Midnight Freight")
+		m.Digital, m.Theatrical = time.Time{}, time.Date(2026, 9, 11, 0, 0, 0, 0, time.UTC)
+		m.Released, m.HomeAt = m.Theatrical, time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)
+		put(m, 4)
+		u.openDetail(m)
 	case "loading":
 		u.sel = 4
 	case "filter":

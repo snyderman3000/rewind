@@ -85,15 +85,13 @@ ABOUT THE TRAILERS
   watch the real trailer.
 
 ABOUT "NEW"
-  Rewind takes recent films you can stream, rent or buy now: digital
-  releases, films from US theaters and films that premiered in the last
-  "days" days, plus streaming releases from the past year. A theatrical
-  film shows up as soon as it can be rented, even before TMDB records its
-  digital release date (it then shows RELEASED instead of DIGITAL). TMDB
-  doesn't record when a film reached a service, so when an older film
-  shows up between refreshes, or a rental moves to a service, it has most
-  likely just arrived, so NEWEST puts it on top and its
-  details show an ARRIVED date.
+  Rewind lists films whose first US home release was in the last "days"
+  days and that you can stream or rent now. NEWEST sorts by the first US
+  digital release date on TMDB (re-releases and dates still to come don't
+  count, so films only open for pre-order aren't listed). When TMDB has no
+  digital date yet, Rewind uses the day it first saw the film available to
+  rent or stream (AT HOME BY on the details screen). Films first released
+  more than two years ago are never listed; search for those with SELECT.
 
 DATA
   Movie data and images: TMDB. This product uses the TMDB API but is not

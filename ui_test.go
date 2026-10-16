@@ -22,7 +22,7 @@ func testUI(t *testing.T) *UI {
 // Every scene draws without panicking at the Mini Plus and v4 resolutions.
 func TestScenesDraw(t *testing.T) {
 	for _, size := range [][2]int{{640, 480}, {752, 560}} {
-		for _, s := range []string{"boot", "list", "loading", "filter", "family", "detail", "trailer", "trailer-cut", "keyboard", "search", "setup", "bye", "error"} {
+		for _, s := range []string{"boot", "list", "loading", "filter", "family", "detail", "trailer", "trailer-cut", "detail-undated", "keyboard", "search", "setup", "bye", "error"} {
 			env := &Env{DataDir: t.TempDir(), Config: defaultConfig()}
 			c := NewCanvas(size[0], size[1])
 			u := NewUI(env, c.W, c.H)

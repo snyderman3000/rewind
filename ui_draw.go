@@ -592,15 +592,23 @@ func (u *UI) drawDetail(c *Canvas) {
 	if !m.Streaming() {
 		kv("RENT / BUY", strings.ToUpper(strings.Join(m.StoreNames(), " · ")), colVFD)
 	}
-	if !m.Released.IsZero() {
-		label := "DIGITAL"
-		if m.Digital.IsZero() {
-			label = "RELEASED"
-		}
-		kv(label, strings.ToUpper(m.Released.Format("Jan 2, 2006")), colVFD)
+	day := func(t time.Time) string { return strings.ToUpper(t.Format("Jan 2, 2006")) }
+	switch {
+	case !m.Digital.IsZero():
+		kv("DIGITAL", day(m.Digital), colVFD)
+	case !m.DigitalSoon.IsZero():
+		kv("DIGITAL", "COMING "+day(m.DigitalSoon), colDeckAmb)
 	}
-	if m.Arrived() {
-		kv("ARRIVED", strings.ToUpper(m.OnSince.Format("Jan 2, 2006")), colVFD)
+	if m.Digital.IsZero() {
+		switch {
+		case !m.Theatrical.IsZero():
+			kv("IN THEATERS", day(m.Theatrical), colVFD)
+		case !m.Released.IsZero():
+			kv("RELEASED", day(m.Released), colVFD)
+		}
+		if !m.HomeAt.IsZero() && !u.search.on {
+			kv("AT HOME BY", day(m.HomeAt), colVFD) // first seen to rent or stream
+		}
 	}
 	if st, col := u.radarrStatus(m); st != "" {
 		kv("RADARR", st, col)
